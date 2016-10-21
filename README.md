@@ -9,7 +9,7 @@ Repository of collections which are missing in System.Collections.Generic.
 * Based on .NET Core source code, added two ints to each slot as link to prev/next slot
 * Memory overhead: 8 B per collection + 8 B per item (compared to HashSet)
 * Performance overhead: Add/Remove 15-20% slower (compared to HashSet)
-* Operation complexity: Same as HashSet, Add/Remove/Contains: O(1)
+* Operation complexity: Same as HashSet, Add/Remove/Contains are O(1)
 
 ## `OrderedDictionary<TKey,TValue>`
 * Same as `OrderedHashSet<T>` in almost every aspect
