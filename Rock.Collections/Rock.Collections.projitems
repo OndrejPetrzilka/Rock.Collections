@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>ec4f7d06-6fca-47e5-b4b2-15185d39c5b1</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>Rock.Collections</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Internals\CollectionDebugView.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Internals\DictionaryDebugView.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Internals\HashHelpers.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)OrderedDictionary.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)OrderedHashSet.cs" />
+  </ItemGroup>
+</Project>
