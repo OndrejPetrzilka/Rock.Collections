@@ -3,12 +3,13 @@ Repository of collections which are missing in System.Collections.Generic.
 
 ## `OrderedHashSet<T>`
 * Items are kept in order in which they are added
-* Items can be reordered by methods: MoveFirst, MoveLast, MoveBefore, MoveAfter
+* Items can be reordered by methods: MoveFirst, MoveLast, MoveBefore, MoveAfter with complexity O(1)
 * Items can be enumerated in reversed order
 * Items can be enumerated from specified element to end or to beginning of the collection
 * Based on .NET Core source code, added two ints to each slot as link to prev/next slot
 * Memory overhead: 8 B per collection + 8 B per item (compared to HashSet)
 * Performance overhead: Add/Remove 15-20% slower (compared to HashSet)
+* Operation complexity: Same as HashSet, Add/Remove/Contains: O(1) (considering no hash collisions)
 
 ## `OrderedDictionary<TKey,TValue>`
 * Same as `OrderedHashSet<T>` in almost every aspect
