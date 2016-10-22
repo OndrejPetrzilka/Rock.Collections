@@ -3,7 +3,7 @@ Purpose of this repository is to provide some of high-performance collections, w
 
 ## `OrderedHashSet<T>`
 * Items are kept in order in which they are added
-* Items can be reordered by methods: MoveFirst, MoveLast, MoveBefore, MoveAfter with complexity O(1)
+* Items can be reordered by methods: `MoveFirst`, `MoveLast`, `MoveBefore`, `MoveAfter` with complexity O(1)
 * Items can be enumerated in reversed order
 * Items can be enumerated from specified element to end or to beginning of the collection
 * Based on .NET Core source code, added two ints to each slot as link to prev/next slot
