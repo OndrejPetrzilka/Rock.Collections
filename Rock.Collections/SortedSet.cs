@@ -10,7 +10,6 @@ using Rock.Collections.Internals;
 
 namespace Rock.Collections
 {
-    [Serializable]
     internal struct Slot
     {
         public int Left;
@@ -566,36 +565,42 @@ namespace Rock.Collections
                         {
                             // current is a 2-node and sibling is either a 3-node or a 4-node.
                             // We can change the color of current to red by some rotation.
-                            TreeRotation rotation = RotationNeeded(parent, current, sibling);
+
                             int newGrandParent = -1;
-                            switch (rotation)
+                            Debug.Assert(IsRed(m_slots[sibling].Left) || IsRed(m_slots[sibling].Right), "sibling must have at least one red child");
+                            if (IsRed(m_slots[sibling].Left))
                             {
-                                case TreeRotation.RightRotation:
+                                if (m_slots[parent].Left == current)
+                                {
+                                    Debug.Assert(m_slots[parent].Right == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(m_slots[m_slots[sibling].Left].IsRed, "Left child of sibling must be red!");
+                                    newGrandParent = RotateRightLeft(parent);
+                                }
+                                else
+                                {
                                     Debug.Assert(m_slots[parent].Left == sibling, "sibling must be left child of parent!");
                                     Debug.Assert(m_slots[m_slots[sibling].Left].IsRed, "Left child of sibling must be red!");
                                     m_slots[m_slots[sibling].Left].IsRed = false;
                                     newGrandParent = RotateRight(parent);
-                                    break;
-                                case TreeRotation.LeftRotation:
+                                }
+                            }
+                            else
+                            {
+                                if (m_slots[parent].Left == current)
+                                {
                                     Debug.Assert(m_slots[parent].Right == sibling, "sibling must be left child of parent!");
                                     Debug.Assert(m_slots[m_slots[sibling].Right].IsRed, "Right child of sibling must be red!");
                                     m_slots[m_slots[sibling].Right].IsRed = false;
                                     newGrandParent = RotateLeft(parent);
-                                    break;
-
-                                case TreeRotation.RightLeftRotation:
-                                    Debug.Assert(m_slots[parent].Right == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(m_slots[m_slots[sibling].Left].IsRed, "Left child of sibling must be red!");
-                                    newGrandParent = RotateRightLeft(parent);
-                                    break;
-
-                                case TreeRotation.LeftRightRotation:
+                                }
+                                else
+                                {
                                     Debug.Assert(m_slots[parent].Left == sibling, "sibling must be left child of parent!");
                                     Debug.Assert(m_slots[m_slots[sibling].Right].IsRed, "Right child of sibling must be red!");
                                     newGrandParent = RotateLeftRight(parent);
-                                    break;
+                                }
                             }
-
+                            
                             m_slots[newGrandParent].IsRed = m_slots[parent].IsRed;
                             m_slots[parent].IsRed = false;
                             m_slots[current].IsRed = true;
@@ -1128,30 +1133,6 @@ namespace Rock.Collections
         }
 
         /// <summary>
-        /// Testing counter that can track rotations
-        /// </summary>
-        private TreeRotation RotationNeeded(int parent, int current, int sibling)
-        {
-            Debug.Assert(IsRed(m_slots[sibling].Left) || IsRed(m_slots[sibling].Right), "sibling must have at least one red child");
-            if (IsRed(m_slots[sibling].Left))
-            {
-                if (m_slots[parent].Left == current)
-                {
-                    return TreeRotation.RightLeftRotation;
-                }
-                return TreeRotation.RightRotation;
-            }
-            else
-            {
-                if (m_slots[parent].Left == current)
-                {
-                    return TreeRotation.LeftRotation;
-                }
-                return TreeRotation.LeftRightRotation;
-            }
-        }
-
-        /// <summary>
         /// Used for deep equality of SortedSet testing
         /// </summary>
         /// <returns></returns>
@@ -1505,14 +1486,6 @@ namespace Rock.Collections
         #endregion
 
         #region Helper Classes
-        internal enum TreeRotation
-        {
-            LeftRotation = 1,
-            RightRotation = 2,
-            RightLeftRotation = 3,
-            LeftRightRotation = 4,
-        }
-
         public struct Node
         {
             SortedSet<T> m_tree;
