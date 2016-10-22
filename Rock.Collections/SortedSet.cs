@@ -1076,7 +1076,8 @@ namespace Rock.Collections
         {
             int x = m_slots[node].Right;
             SetRight(node, m_slots[x].Left);
-            SetLeft(x, node);
+            m_slots[x].Left = node;
+            m_slots[node].Parent = x;
             return x;
         }
 
@@ -1096,7 +1097,8 @@ namespace Rock.Collections
         {
             int x = m_slots[node].Left;
             SetLeft(node, m_slots[x].Right);
-            SetRight(x, node);
+            m_slots[x].Right = node;
+            m_slots[node].Parent = x;
             return x;
         }
 
