@@ -1,5 +1,5 @@
 # Rock.Collections
-Purpose of this repository is to provide some of the collections, which are missing in System.Collections.Generic. The collections are written in way to minimize unnecessary memory allocations; they are originally used in game engine.
+Purpose of this repository is to provide some of high-performance collections, which are missing in System.Collections.Generic. The collections are written in way to minimize unnecessary memory allocations; they are originally used in game engine.
 
 ## `OrderedHashSet<T>`
 * Items are kept in order in which they are added
@@ -23,7 +23,7 @@ Purpose of this repository is to provide some of the collections, which are miss
 * Additional memory overhead: none, it uses less memory (not yet measured exactly)
 * Performance overhead: Remove ~30% slower, Add ~20% faster when capacity is sufficient (compared to classic SortedSet)
 * Operation complexity: Add/Remove/Contains are O(log2(n)), same as classic SortedSet; Clear is O(n)
-* Clear operation is technically O(n), but very fast, it's only Array.Clear (same as HashSet for example)
+<br>Clear operation is technically O(n), but very fast, it's only Array.Clear (same as HashSet for example)
 
 ## How to use
 * Download the files and add it to your project
