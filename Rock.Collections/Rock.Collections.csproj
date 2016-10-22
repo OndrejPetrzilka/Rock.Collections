@@ -44,8 +44,9 @@
   <ItemGroup>
     <Compile Include="Internals\CollectionDebugView.cs" />
     <Compile Include="Internals\DictionaryDebugView.cs" />
-    <Compile Include="Internals\EnumerableHelpers.cs" />
     <Compile Include="Internals\HashHelpers.cs" />
+    <Compile Include="Internals\KeyCollectionDebugView.cs" />
+    <Compile Include="Internals\ValueCollectionDebugView.cs" />
     <Compile Include="OrderedDictionary.cs" />
     <Compile Include="OrderedHashSet.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

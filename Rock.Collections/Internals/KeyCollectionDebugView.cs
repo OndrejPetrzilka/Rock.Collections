@@ -4,25 +4,24 @@ using System.Diagnostics;
 
 namespace Rock.Collections.Internals
 {
-    public sealed class CollectionDebugView<T>
+    public sealed class KeyCollectionDebugView<TKey, TValue>
     {
-        private readonly ICollection<T> m_collection;
+        private readonly ICollection<TKey> m_collection;
 
-        public CollectionDebugView(ICollection<T> collection)
+        public KeyCollectionDebugView(ICollection<TKey> collection)
         {
             if (collection == null)
-            {
                 throw new ArgumentNullException(nameof(collection));
-            }
+
             m_collection = collection;
         }
 
         [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
-        public T[] Items
+        public TKey[] Items
         {
             get
             {
-                T[] items = new T[m_collection.Count];
+                TKey[] items = new TKey[m_collection.Count];
                 m_collection.CopyTo(items, 0);
                 return items;
             }

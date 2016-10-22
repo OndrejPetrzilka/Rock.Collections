@@ -1342,7 +1342,7 @@ namespace Rock.Collections
             }
         }
 
-        [DebuggerTypeProxy(typeof(DictionaryKeyCollectionDebugView<,>))]
+        [DebuggerTypeProxy(typeof(KeyCollectionDebugView<,>))]
         [DebuggerDisplay("Count = {Count}")]
         [Serializable]
         public sealed class KeyCollection : ICollection<TKey>, ICollection, IReadOnlyCollection<TKey>
@@ -1572,7 +1572,7 @@ namespace Rock.Collections
             }
         }
 
-        [DebuggerTypeProxy(typeof(DictionaryValueCollectionDebugView<,>))]
+        [DebuggerTypeProxy(typeof(ValueCollectionDebugView<,>))]
         [DebuggerDisplay("Count = {Count}")]
         [Serializable]
         public sealed class ValueCollection : ICollection<TValue>, ICollection, IReadOnlyCollection<TValue>
