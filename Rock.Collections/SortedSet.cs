@@ -391,25 +391,16 @@ namespace Rock.Collections
         #endregion
 
         #region ICollection<T> Members
+        void ICollection<T>.Add(T item)
+        {
+            Add(item);
+        }
+
         /// <summary>
         /// Add the value ITEM to the tree, returns true if added, false if duplicate 
         /// </summary>
-        /// <param name="item">item to be added</param> 
+        /// <param name="item">item to be added</param>        
         public bool Add(T item)
-        {
-            return AddIfNotPresent(item);
-        }
-
-        void ICollection<T>.Add(T item)
-        {
-            AddIfNotPresent(item);
-        }
-
-        /// <summary>
-        /// Adds ITEM to the tree if not already present. Returns TRUE if value was successfully added         
-        /// or FALSE if it is a duplicate
-        /// </summary>        
-        internal bool AddIfNotPresent(T item)
         {
             // empty tree
             if (m_root == -1)
@@ -490,11 +481,6 @@ namespace Rock.Collections
         /// <param name="item"></param>
         /// <returns></returns>
         public bool Remove(T item)
-        {
-            return DoRemove(item); // hack so it can be made non-virtual
-        }
-
-        internal bool DoRemove(T item)
         {
             if (m_root == -1)
             {
