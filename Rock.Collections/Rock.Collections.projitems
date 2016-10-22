@@ -9,8 +9,6 @@
     <Import_RootNamespace>Rock.Collections</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(MSBuildThisFileDirectory)Internals\ArrayBuilder.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Internals\BitHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Internals\CollectionDebugView.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Internals\DictionaryDebugView.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Internals\EnumerableHelpers.cs" />
