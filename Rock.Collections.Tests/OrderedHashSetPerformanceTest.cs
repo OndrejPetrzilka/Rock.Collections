@@ -9,7 +9,7 @@ namespace Rock.Tests.Base
     [TestClass]
     public class OrderedHashSetPerformanceTest
     {
-        static readonly int IterCount = 2000000;
+        static readonly int IterCount = 5000000;
         static IEnumerable<int> m_warm = Enumerable.Range(0, IterCount);
 
         static HashSet<int> m_warmHashSet = new HashSet<int>(m_warm);
