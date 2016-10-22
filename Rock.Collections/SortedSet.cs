@@ -1315,7 +1315,7 @@ namespace Rock.Collections
             info.AddValue(ComparerName, m_comparer, typeof(IComparer<T>));
             info.AddValue(VersionName, m_version);
 
-            if (m_root != null)
+            if (m_root != -1)
             {
                 T[] items = new T[Count];
                 CopyTo(items, 0);
