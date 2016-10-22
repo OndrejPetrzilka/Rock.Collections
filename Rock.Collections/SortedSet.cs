@@ -33,15 +33,19 @@ namespace Rock.Collections
     public class SortedSet<T> : ICollection<T>, ICollection, IReadOnlyCollection<T>, ISerializable, IDeserializationCallback
     {
         #region local variables/constants
-        private NodeInternal _root;
-        private IComparer<T> _comparer;
-        private int _count;
-        private int _version;
+        private int m_root;
+        private IComparer<T> m_comparer;
+        private int m_count;
+        private int m_version;
         [NonSerialized]
-        private object _syncRoot;
-        private SerializationInfo _siInfo; //A temporary variable which we need during deserialization
-        private NodeInternal[] m_pool;
-        private int m_poolCount;
+        private object m_syncRoot;
+        private SerializationInfo m_siInfo; //A temporary variable which we need during deserialization
+        private Slot[] m_slots;
+        private int m_freeList;
+        private int m_lastIndex;
+
+        private const int MinSize = 4;
+        private const int GrowFactor = 2;
 
         private const string ComparerName = "Comparer";
         private const string CountName = "Count";
@@ -63,12 +67,12 @@ namespace Rock.Collections
 
         public int Count
         {
-            get { return _count; }
+            get { return m_count; }
         }
 
         public IComparer<T> Comparer
         {
-            get { return _comparer; }
+            get { return m_comparer; }
         }
 
         /// <summary>
@@ -106,15 +110,10 @@ namespace Rock.Collections
 
         public SortedSet(int capacity, IComparer<T> comparer)
         {
-            m_pool = new NodeInternal[capacity];
-            if (comparer == null)
-            {
-                _comparer = Comparer<T>.Default;
-            }
-            else
-            {
-                _comparer = comparer;
-            }
+            m_comparer = comparer ?? Comparer<T>.Default;
+            m_freeList = -1;
+            m_slots = new Slot[capacity];
+            m_root = -1;
         }
 
         public SortedSet(IEnumerable<T> collection)
@@ -122,6 +121,7 @@ namespace Rock.Collections
         {
         }
 
+        // TODO: Optimize
         public SortedSet(IEnumerable<T> collection, IComparer<T> comparer)
             : this(comparer)
         {
@@ -129,218 +129,234 @@ namespace Rock.Collections
             {
                 throw new ArgumentNullException(nameof(collection));
             }
-
-            m_pool = new NodeInternal[0];
-
-            // these are explicit type checks in the mould of HashSet. It would have worked better
-            // with something like an ISorted<T> (we could make this work for SortedList.Keys etc)
-            SortedSet<T> baseSortedSet = collection as SortedSet<T>;
-            if (baseSortedSet != null && AreComparersEqual(this, baseSortedSet))
-            {
-                //breadth first traversal to recreate nodes
-                if (baseSortedSet.Count == 0)
-                {
-                    return;
-                }
-
-                //pre order way to replicate nodes
-                Stack<NodeInternal> theirStack = new Stack<SortedSet<T>.NodeInternal>(2 * log2(baseSortedSet.Count) + 2);
-                Stack<NodeInternal> myStack = new Stack<SortedSet<T>.NodeInternal>(2 * log2(baseSortedSet.Count) + 2);
-                NodeInternal theirCurrent = baseSortedSet._root;
-                NodeInternal myCurrent = (theirCurrent != null ? new SortedSet<T>.NodeInternal(theirCurrent.Item, theirCurrent.IsRed) : null);
-                _root = myCurrent;
-                if (_root != null)
-                {
-                    _root.Parent = null;
-                }
-                while (theirCurrent != null)
-                {
-                    theirStack.Push(theirCurrent);
-                    myStack.Push(myCurrent);
-                    myCurrent.Left = (theirCurrent.Left != null ? new SortedSet<T>.NodeInternal(theirCurrent.Left.Item, theirCurrent.Left.IsRed) : null);
-                    theirCurrent = theirCurrent.Left;
-                    myCurrent = myCurrent.Left;
-                }
-                while (theirStack.Count != 0)
-                {
-                    theirCurrent = theirStack.Pop();
-                    myCurrent = myStack.Pop();
-                    NodeInternal theirRight = theirCurrent.Right;
-                    NodeInternal myRight = null;
-                    if (theirRight != null)
-                    {
-                        myRight = new SortedSet<T>.NodeInternal(theirRight.Item, theirRight.IsRed);
-                    }
-                    myCurrent.Right = myRight;
-
-                    while (theirRight != null)
-                    {
-                        theirStack.Push(theirRight);
-                        myStack.Push(myRight);
-                        myRight.Left = (theirRight.Left != null ? new SortedSet<T>.NodeInternal(theirRight.Left.Item, theirRight.Left.IsRed) : null);
-                        theirRight = theirRight.Left;
-                        myRight = myRight.Left;
-                    }
-                }
-                _count = baseSortedSet._count;
-            }
-            else
-            {
-                int count;
-                T[] els = ToArray(collection, out count);
-                if (count > 0)
-                {
-                    comparer = _comparer; // If comparer is null, sets it to Comparer<T>.Default
-                    Array.Sort(els, 0, count, comparer);
-                    int index = 1;
-                    for (int i = 1; i < count; i++)
-                    {
-                        if (comparer.Compare(els[i], els[i - 1]) != 0)
-                        {
-                            els[index++] = els[i];
-                        }
-                    }
-                    count = index;
-
-                    _root = ConstructRootFromSortedArray(els, 0, count - 1, null);
-                    if (_root != null)
-                    {
-                        _root.Parent = null;
-                    }
-                    _count = count;
-                }
-            }
+            foreach (var item in collection)
+                Add(item);
         }
+
+        //public SortedSet(IEnumerable<T> collection)
+        //    : this(collection, Comparer<T>.Default)
+        //{
+        //}
+
+        //public SortedSet(IEnumerable<T> collection, IComparer<T> comparer)
+        //    : this(comparer)
+        //{
+        //    if (collection == null)
+        //    {
+        //        throw new ArgumentNullException(nameof(collection));
+        //    }
+
+        //    m_pool = new Slot[0];
+
+        //    // these are explicit type checks in the mould of HashSet. It would have worked better
+        //    // with something like an ISorted<T> (we could make this work for SortedList.Keys etc)
+        //    SortedSet<T> baseSortedSet = collection as SortedSet<T>;
+        //    if (baseSortedSet != null && AreComparersEqual(this, baseSortedSet))
+        //    {
+        //        //breadth first traversal to recreate nodes
+        //        if (baseSortedSet.Count == 0)
+        //        {
+        //            return;
+        //        }
+
+        //        //pre order way to replicate nodes
+        //        Stack<Slot> theirStack = new Stack<SortedSet<T>.Slot>(2 * log2(baseSortedSet.Count) + 2);
+        //        Stack<Slot> myStack = new Stack<SortedSet<T>.Slot>(2 * log2(baseSortedSet.Count) + 2);
+        //        Slot theirCurrent = baseSortedSet._root;
+        //        Slot myCurrent = (theirCurrent != null ? new SortedSet<T>.Slot(theirCurrent.Item, theirCurrent.IsRed) : null);
+        //        _root = myCurrent;
+        //        if (_root != null)
+        //        {
+        //            _root.Parent = null;
+        //        }
+        //        while (theirCurrent != null)
+        //        {
+        //            theirStack.Push(theirCurrent);
+        //            myStack.Push(myCurrent);
+        //            myCurrent.Left = (theirCurrent.Left != null ? new SortedSet<T>.Slot(theirCurrent.Left.Item, theirCurrent.Left.IsRed) : null);
+        //            theirCurrent = theirCurrent.Left;
+        //            myCurrent = myCurrent.Left;
+        //        }
+        //        while (theirStack.Count != 0)
+        //        {
+        //            theirCurrent = theirStack.Pop();
+        //            myCurrent = myStack.Pop();
+        //            Slot theirRight = theirCurrent.Right;
+        //            Slot myRight = null;
+        //            if (theirRight != null)
+        //            {
+        //                myRight = new SortedSet<T>.Slot(theirRight.Item, theirRight.IsRed);
+        //            }
+        //            myCurrent.Right = myRight;
+
+        //            while (theirRight != null)
+        //            {
+        //                theirStack.Push(theirRight);
+        //                myStack.Push(myRight);
+        //                myRight.Left = (theirRight.Left != null ? new SortedSet<T>.Slot(theirRight.Left.Item, theirRight.Left.IsRed) : null);
+        //                theirRight = theirRight.Left;
+        //                myRight = myRight.Left;
+        //            }
+        //        }
+        //        _count = baseSortedSet._count;
+        //    }
+        //    else
+        //    {
+        //        int count;
+        //        T[] els = ToArray(collection, out count);
+        //        if (count > 0)
+        //        {
+        //            comparer = _comparer; // If comparer is null, sets it to Comparer<T>.Default
+        //            Array.Sort(els, 0, count, comparer);
+        //            int index = 1;
+        //            for (int i = 1; i < count; i++)
+        //            {
+        //                if (comparer.Compare(els[i], els[i - 1]) != 0)
+        //                {
+        //                    els[index++] = els[i];
+        //                }
+        //            }
+        //            count = index;
+
+        //            _root = ConstructRootFromSortedArray(els, 0, count - 1, null);
+        //            if (_root != null)
+        //            {
+        //                _root.Parent = null;
+        //            }
+        //            _count = count;
+        //        }
+        //    }
+        //}
 
         protected SortedSet(SerializationInfo info, StreamingContext context)
         {
-            _siInfo = info;
+            m_siInfo = info;
         }
 
-        internal static T[] ToArray(IEnumerable<T> source, out int length)
-        {
-            ICollection<T> ic = source as ICollection<T>;
-            if (ic != null)
-            {
-                int count = ic.Count;
-                if (count != 0)
-                {
-                    T[] arr = new T[count];
-                    ic.CopyTo(arr, 0);
-                    length = count;
-                    return arr;
-                }
-            }
-            else
-            {
-                using (var en = source.GetEnumerator())
-                {
-                    if (en.MoveNext())
-                    {
-                        const int DefaultCapacity = 4;
-                        T[] arr = new T[DefaultCapacity];
-                        arr[0] = en.Current;
-                        int count = 1;
+        //internal static T[] ToArray(IEnumerable<T> source, out int length)
+        //{
+        //    ICollection<T> ic = source as ICollection<T>;
+        //    if (ic != null)
+        //    {
+        //        int count = ic.Count;
+        //        if (count != 0)
+        //        {
+        //            T[] arr = new T[count];
+        //            ic.CopyTo(arr, 0);
+        //            length = count;
+        //            return arr;
+        //        }
+        //    }
+        //    else
+        //    {
+        //        using (var en = source.GetEnumerator())
+        //        {
+        //            if (en.MoveNext())
+        //            {
+        //                const int DefaultCapacity = 4;
+        //                T[] arr = new T[DefaultCapacity];
+        //                arr[0] = en.Current;
+        //                int count = 1;
 
-                        while (en.MoveNext())
-                        {
-                            if (count == arr.Length)
-                            {
-                                const int MaxArrayLength = 0x7FEFFFFF;
-                                int newLength = count << 1;
-                                if ((uint)newLength > MaxArrayLength)
-                                {
-                                    newLength = MaxArrayLength <= count ? count + 1 : MaxArrayLength;
-                                }
+        //                while (en.MoveNext())
+        //                {
+        //                    if (count == arr.Length)
+        //                    {
+        //                        const int MaxArrayLength = 0x7FEFFFFF;
+        //                        int newLength = count << 1;
+        //                        if ((uint)newLength > MaxArrayLength)
+        //                        {
+        //                            newLength = MaxArrayLength <= count ? count + 1 : MaxArrayLength;
+        //                        }
 
-                                Array.Resize(ref arr, newLength);
-                            }
+        //                        Array.Resize(ref arr, newLength);
+        //                    }
 
-                            arr[count++] = en.Current;
-                        }
+        //                    arr[count++] = en.Current;
+        //                }
 
-                        length = count;
-                        return arr;
-                    }
-                }
-            }
+        //                length = count;
+        //                return arr;
+        //            }
+        //        }
+        //    }
 
-            length = 0;
-            return null;
-        }
+        //    length = 0;
+        //    return null;
+        //}
 
-        private static NodeInternal ConstructRootFromSortedArray(T[] arr, int startIndex, int endIndex, NodeInternal redNode)
-        {
-            //what does this do?
-            //you're given a sorted array... say 1 2 3 4 5 6 
-            //2 cases:
-            //    If there are odd # of elements, pick the middle element (in this case 4), and compute
-            //    its left and right branches
-            //    If there are even # of elements, pick the left middle element, save the right middle element
-            //    and call the function on the rest
-            //    1 2 3 4 5 6 -> pick 3, save 4 and call the fn on 1,2 and 5,6
-            //    now add 4 as a red node to the lowest element on the right branch
-            //             3                       3
-            //         1       5       ->     1        5
-            //           2       6             2     4   6            
-            //    As we're adding to the leftmost of the right branch, nesting will not hurt the red-black properties
-            //    Leaf nodes are red if they have no sibling (if there are 2 nodes or if a node trickles
-            //    down to the bottom
+        //private static Slot ConstructRootFromSortedArray(T[] arr, int startIndex, int endIndex, Slot redNode)
+        //{
+        //    //what does this do?
+        //    //you're given a sorted array... say 1 2 3 4 5 6 
+        //    //2 cases:
+        //    //    If there are odd # of elements, pick the middle element (in this case 4), and compute
+        //    //    its left and right branches
+        //    //    If there are even # of elements, pick the left middle element, save the right middle element
+        //    //    and call the function on the rest
+        //    //    1 2 3 4 5 6 -> pick 3, save 4 and call the fn on 1,2 and 5,6
+        //    //    now add 4 as a red node to the lowest element on the right branch
+        //    //             3                       3
+        //    //         1       5       ->     1        5
+        //    //           2       6             2     4   6            
+        //    //    As we're adding to the leftmost of the right branch, nesting will not hurt the red-black properties
+        //    //    Leaf nodes are red if they have no sibling (if there are 2 nodes or if a node trickles
+        //    //    down to the bottom
 
-            //the iterative way to do this ends up wasting more space than it saves in stack frames (at
-            //least in what i tried)
-            //so we're doing this recursively
-            //base cases are described below
-            int size = endIndex - startIndex + 1;
-            if (size == 0)
-            {
-                return null;
-            }
-            NodeInternal root = null;
-            if (size == 1)
-            {
-                root = new NodeInternal(arr[startIndex], false);
-                if (redNode != null)
-                {
-                    root.Left = redNode;
-                }
-            }
-            else if (size == 2)
-            {
-                root = new NodeInternal(arr[startIndex], false);
-                root.Right = new NodeInternal(arr[endIndex], false);
-                root.Right.IsRed = true;
-                if (redNode != null)
-                {
-                    root.Left = redNode;
-                }
-            }
-            else if (size == 3)
-            {
-                root = new NodeInternal(arr[startIndex + 1], false);
-                root.Left = new NodeInternal(arr[startIndex], false);
-                root.Right = new NodeInternal(arr[endIndex], false);
-                if (redNode != null)
-                {
-                    root.Left.Left = redNode;
-                }
-            }
-            else
-            {
-                int midpt = ((startIndex + endIndex) / 2);
-                root = new NodeInternal(arr[midpt], false);
-                root.Left = ConstructRootFromSortedArray(arr, startIndex, midpt - 1, redNode);
-                if (size % 2 == 0)
-                {
-                    root.Right = ConstructRootFromSortedArray(arr, midpt + 2, endIndex, new NodeInternal(arr[midpt + 1], true));
-                }
-                else
-                {
-                    root.Right = ConstructRootFromSortedArray(arr, midpt + 1, endIndex, null);
-                }
-            }
-            return root;
-        }
+        //    //the iterative way to do this ends up wasting more space than it saves in stack frames (at
+        //    //least in what i tried)
+        //    //so we're doing this recursively
+        //    //base cases are described below
+        //    int size = endIndex - startIndex + 1;
+        //    if (size == 0)
+        //    {
+        //        return null;
+        //    }
+        //    Slot root = null;
+        //    if (size == 1)
+        //    {
+        //        root = new Slot(arr[startIndex], false);
+        //        if (redNode != null)
+        //        {
+        //            root.Left = redNode;
+        //        }
+        //    }
+        //    else if (size == 2)
+        //    {
+        //        root = new Slot(arr[startIndex], false);
+        //        root.Right = new Slot(arr[endIndex], false);
+        //        root.Right.IsRed = true;
+        //        if (redNode != null)
+        //        {
+        //            root.Left = redNode;
+        //        }
+        //    }
+        //    else if (size == 3)
+        //    {
+        //        root = new Slot(arr[startIndex + 1], false);
+        //        root.Left = new Slot(arr[startIndex], false);
+        //        root.Right = new Slot(arr[endIndex], false);
+        //        if (redNode != null)
+        //        {
+        //            root.Left.Left = redNode;
+        //        }
+        //    }
+        //    else
+        //    {
+        //        int midpt = ((startIndex + endIndex) / 2);
+        //        root = new Slot(arr[midpt], false);
+        //        root.Left = ConstructRootFromSortedArray(arr, startIndex, midpt - 1, redNode);
+        //        if (size % 2 == 0)
+        //        {
+        //            root.Right = ConstructRootFromSortedArray(arr, midpt + 2, endIndex, new Slot(arr[midpt + 1], true));
+        //        }
+        //        else
+        //        {
+        //            root.Right = ConstructRootFromSortedArray(arr, midpt + 1, endIndex, null);
+        //        }
+        //    }
+        //    return root;
+        //}
 
         #endregion
 
@@ -365,11 +381,11 @@ namespace Rock.Collections
         {
             get
             {
-                if (_syncRoot == null)
+                if (m_syncRoot == null)
                 {
-                    Interlocked.CompareExchange(ref _syncRoot, new object(), null);
+                    Interlocked.CompareExchange(ref m_syncRoot, new object(), null);
                 }
-                return _syncRoot;
+                return m_syncRoot;
             }
         }
         #endregion
@@ -395,35 +411,36 @@ namespace Rock.Collections
         /// </summary>        
         internal bool AddIfNotPresent(T item)
         {
-            if (_root == null)
-            {   // empty tree
-                _root = ObtainNode(item, false);
-                _count = 1;
-                _version++;
+            // empty tree
+            if (m_root == -1)
+            {
+                m_root = ObtainSlot(item, false);
+                m_count = 1;
+                m_version++;
                 return true;
             }
 
             // Search for a node at bottom to insert the new node. 
             // If we can guarantee the node we found is not a 4-node, it would be easy to do insertion.
             // We split 4-nodes along the search path.
-            NodeInternal current = _root;
-            NodeInternal parent = null;
-            NodeInternal grandParent = null;
-            NodeInternal greatGrandParent = null;
+            int current = m_root;
+            int parent = -1;
+            int grandParent = -1;
+            int greatGrandParent = -1;
 
             //even if we don't actually add to the set, we may be altering its structure (by doing rotations
             //and such). so update version to disable any enumerators/subsets working on it
-            _version++;
+            m_version++;
 
             int order = 0;
-            while (current != null)
+            while (current != -1)
             {
-                order = _comparer.Compare(item, current.Item);
+                order = m_comparer.Compare(item, m_slots[current].Item);
                 if (order == 0)
                 {
                     // We could have changed root node to red during the search process.
                     // We need to set it to black before we return.
-                    _root.IsRed = false;
+                    m_slots[m_root].IsRed = false;
                     return false;
                 }
 
@@ -440,30 +457,30 @@ namespace Rock.Collections
                 greatGrandParent = grandParent;
                 grandParent = parent;
                 parent = current;
-                current = (order < 0) ? current.Left : current.Right;
+                current = (order < 0) ? m_slots[current].Left : m_slots[current].Right;
             }
 
-            Debug.Assert(parent != null, "Parent node cannot be null here!");
+            Debug.Assert(parent != -1, "Parent node cannot be null here!");
             // ready to insert the new node
-            NodeInternal node = ObtainNode(item);
+            int node = ObtainSlot(item);
             if (order > 0)
             {
-                parent.Right = node;
+                SetRight(parent, node);
             }
             else
             {
-                parent.Left = node;
+                SetLeft(parent, node);
             }
 
             // the new node will be red, so we will need to adjust the colors if parent node is also red
-            if (parent.IsRed)
+            if (m_slots[parent].IsRed)
             {
                 InsertionBalance(node, ref parent, grandParent, greatGrandParent);
             }
 
             // Root node is always black
-            _root.IsRed = false;
-            ++_count;
+            m_slots[m_root].IsRed = false;
+            ++m_count;
             return true;
         }
 
@@ -479,7 +496,7 @@ namespace Rock.Collections
 
         internal bool DoRemove(T item)
         {
-            if (_root == null)
+            if (m_root == -1)
             {
                 return false;
             }
@@ -494,32 +511,32 @@ namespace Rock.Collections
 
             //even if we don't actually remove from the set, we may be altering its structure (by doing rotations
             //and such). so update version to disable any enumerators/subsets working on it
-            _version++;
+            m_version++;
 
-            NodeInternal current = _root;
-            NodeInternal parent = null;
-            NodeInternal grandParent = null;
-            NodeInternal match = null;
-            NodeInternal parentOfMatch = null;
+            int current = m_root;
+            int parent = -1;
+            int grandParent = -1;
+            int match = -1;
+            int parentOfMatch = -1;
             bool foundMatch = false;
-            while (current != null)
+            while (current != -1)
             {
                 if (Is2Node(current))
                 { // fix up 2-Node
-                    if (parent == null)
+                    if (parent == -1)
                     {   // current is root. Mark it as red
-                        current.IsRed = true;
+                        m_slots[current].IsRed = true;
                     }
                     else
                     {
-                        NodeInternal sibling = GetSibling(current, parent);
-                        if (sibling.IsRed)
+                        int sibling = GetSibling(current, parent);
+                        if (m_slots[sibling].IsRed)
                         {
                             // If parent is a 3-node, flip the orientation of the red link. 
                             // We can achieve this by a single rotation        
                             // This case is converted to one of other cased below.
-                            Debug.Assert(!parent.IsRed, "parent must be a black node!");
-                            if (parent.Right == sibling)
+                            Debug.Assert(!m_slots[parent].IsRed, "parent must be a black node!");
+                            if (m_slots[parent].Right == sibling)
                             {
                                 RotateLeft(parent);
                             }
@@ -528,8 +545,8 @@ namespace Rock.Collections
                                 RotateRight(parent);
                             }
 
-                            parent.IsRed = true;
-                            sibling.IsRed = false;    // parent's color
+                            m_slots[parent].IsRed = true;
+                            m_slots[sibling].IsRed = false;    // parent's color
                             // sibling becomes child of grandParent or root after rotation. Update link from grandParent or root
                             ReplaceChildOfNodeOrRoot(grandParent, parent, sibling);
                             // sibling will become grandParent of current node 
@@ -540,9 +557,9 @@ namespace Rock.Collections
                             }
 
                             // update sibling, this is necessary for following processing
-                            sibling = (parent.Left == current) ? parent.Right : parent.Left;
+                            sibling = (m_slots[parent].Left == current) ? m_slots[parent].Right : m_slots[parent].Left;
                         }
-                        Debug.Assert(sibling != null && sibling.IsRed == false, "sibling must not be null and it must be black!");
+                        Debug.Assert(sibling != -1 && m_slots[sibling].IsRed == false, "sibling must not be null and it must be black!");
 
                         if (Is2Node(sibling))
                         {
@@ -553,38 +570,38 @@ namespace Rock.Collections
                             // current is a 2-node and sibling is either a 3-node or a 4-node.
                             // We can change the color of current to red by some rotation.
                             TreeRotation rotation = RotationNeeded(parent, current, sibling);
-                            NodeInternal newGrandParent = null;
+                            int newGrandParent = -1;
                             switch (rotation)
                             {
                                 case TreeRotation.RightRotation:
-                                    Debug.Assert(parent.Left == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(sibling.Left.IsRed, "Left child of sibling must be red!");
-                                    sibling.Left.IsRed = false;
+                                    Debug.Assert(m_slots[parent].Left == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(m_slots[m_slots[sibling].Left].IsRed, "Left child of sibling must be red!");
+                                    m_slots[m_slots[sibling].Left].IsRed = false;
                                     newGrandParent = RotateRight(parent);
                                     break;
                                 case TreeRotation.LeftRotation:
-                                    Debug.Assert(parent.Right == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(sibling.Right.IsRed, "Right child of sibling must be red!");
-                                    sibling.Right.IsRed = false;
+                                    Debug.Assert(m_slots[parent].Right == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(m_slots[m_slots[sibling].Right].IsRed, "Right child of sibling must be red!");
+                                    m_slots[m_slots[sibling].Right].IsRed = false;
                                     newGrandParent = RotateLeft(parent);
                                     break;
 
                                 case TreeRotation.RightLeftRotation:
-                                    Debug.Assert(parent.Right == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(sibling.Left.IsRed, "Left child of sibling must be red!");
+                                    Debug.Assert(m_slots[parent].Right == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(m_slots[m_slots[sibling].Left].IsRed, "Left child of sibling must be red!");
                                     newGrandParent = RotateRightLeft(parent);
                                     break;
 
                                 case TreeRotation.LeftRightRotation:
-                                    Debug.Assert(parent.Left == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(sibling.Right.IsRed, "Right child of sibling must be red!");
+                                    Debug.Assert(m_slots[parent].Left == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(m_slots[m_slots[sibling].Right].IsRed, "Right child of sibling must be red!");
                                     newGrandParent = RotateLeftRight(parent);
                                     break;
                             }
 
-                            newGrandParent.IsRed = parent.IsRed;
-                            parent.IsRed = false;
-                            current.IsRed = true;
+                            m_slots[newGrandParent].IsRed = m_slots[parent].IsRed;
+                            m_slots[parent].IsRed = false;
+                            m_slots[current].IsRed = true;
                             ReplaceChildOfNodeOrRoot(grandParent, parent, newGrandParent);
                             if (parent == match)
                             {
@@ -596,7 +613,7 @@ namespace Rock.Collections
                 }
 
                 // we don't need to compare any more once we found the match
-                int order = foundMatch ? -1 : _comparer.Compare(item, current.Item);
+                int order = foundMatch ? -1 : m_comparer.Compare(item, m_slots[current].Item);
                 if (order == 0)
                 {
                     // save the matching node
@@ -610,56 +627,47 @@ namespace Rock.Collections
 
                 if (order < 0)
                 {
-                    current = current.Left;
+                    current = m_slots[current].Left;
                 }
                 else
                 {
-                    current = current.Right;       // continue the search in  right sub tree after we find a match
+                    current = m_slots[current].Right;       // continue the search in  right sub tree after we find a match
                 }
             }
 
             // move successor to the matching node position and replace links
-            if (match != null)
+            if (match != -1)
             {
                 ReplaceNode(match, parentOfMatch, parent, grandParent);
-                --_count;
-                ReturnNode(match);
+                --m_count;
+                ReturnSlot(match);
             }
 
-            if (_root != null)
+            if (m_root != -1)
             {
-                _root.IsRed = false;
+                m_slots[m_root].IsRed = false;
             }
             return foundMatch;
         }
 
         public void Clear()
         {
-            int oldPoolCount = m_poolCount;
-
-            // Return all nodes without clearing (so we can iterate)
-            var node = GetFirst();
-            while (node != null)
+            if (m_lastIndex > 0)
             {
-                ReturnNodeNoClear(node);
-                node = GetNext(node);
+                // clear the elements so that the gc can reclaim the references.
+                // clear only up to m_lastIndex for m_slots
+                Array.Clear(m_slots, 0, m_lastIndex);
+                m_lastIndex = 0;
+                m_count = 0;
+                m_freeList = -1;
+                m_root = -1;
             }
-
-            // Clear returned nodes
-            for (int i = oldPoolCount; i < m_poolCount; i++)
-            {
-                ClearNode(m_pool[i]);
-            }
-
-            _root = null;
-            _count = 0;
-            ++_version;
+            ++m_version;
         }
-
 
         public bool Contains(T item)
         {
-            return FindNode(item) != null;
+            return FindNode(item) != -1;
         }
 
         public void CopyTo(T[] array)
@@ -780,26 +788,26 @@ namespace Rock.Collections
 
         #region Tree Specific Operations
 
-        private static NodeInternal GetSibling(NodeInternal node, NodeInternal parent)
+        private int GetSibling(int node, int parent)
         {
-            if (parent.Left == node)
+            if (m_slots[parent].Left == node)
             {
-                return parent.Right;
+                return m_slots[parent].Right;
             }
-            return parent.Left;
+            return m_slots[parent].Left;
         }
 
         // After calling InsertionBalance, we need to make sure current and parent up-to-date.
         // It doesn't matter if we keep grandParent and greatGrantParent up-to-date 
         // because we won't need to split again in the next node.
         // By the time we need to split again, everything will be correctly set.
-        private void InsertionBalance(NodeInternal current, ref NodeInternal parent, NodeInternal grandParent, NodeInternal greatGrandParent)
+        private void InsertionBalance(int current, ref int parent, int grandParent, int greatGrandParent)
         {
-            Debug.Assert(grandParent != null, "Grand parent cannot be null here!");
-            bool parentIsOnRight = (grandParent.Right == parent);
-            bool currentIsOnRight = (parent.Right == current);
+            Debug.Assert(grandParent != -1, "Grand parent cannot be null here!");
+            bool parentIsOnRight = (m_slots[grandParent].Right == parent);
+            bool currentIsOnRight = (m_slots[parent].Right == current);
 
-            NodeInternal newChildOfGreatGrandParent;
+            int newChildOfGreatGrandParent;
             if (parentIsOnRight == currentIsOnRight)
             { // same orientation, single rotation
                 newChildOfGreatGrandParent = currentIsOnRight ? RotateLeft(grandParent) : RotateRight(grandParent);
@@ -811,167 +819,157 @@ namespace Rock.Collections
                 parent = greatGrandParent;
             }
             // grand parent will become a child of either parent of current.
-            grandParent.IsRed = true;
-            newChildOfGreatGrandParent.IsRed = false;
+            m_slots[grandParent].IsRed = true;
+            m_slots[newChildOfGreatGrandParent].IsRed = false;
 
             ReplaceChildOfNodeOrRoot(greatGrandParent, grandParent, newChildOfGreatGrandParent);
         }
 
-        private static bool Is2Node(NodeInternal node)
+        private bool Is2Node(int node)
         {
-            Debug.Assert(node != null, "node cannot be null!");
-            return IsBlack(node) && IsNullOrBlack(node.Left) && IsNullOrBlack(node.Right);
+            Debug.Assert(node != -1, "node cannot be null!");
+            return IsBlack(node) && IsNullOrBlack(m_slots[node].Left) && IsNullOrBlack(m_slots[node].Right);
         }
 
-        private static bool Is4Node(NodeInternal node)
+        private bool Is4Node(int node)
         {
-            return IsRed(node.Left) && IsRed(node.Right);
+            return IsRed(m_slots[node].Left) && IsRed(m_slots[node].Right);
         }
 
-        private static bool IsBlack(NodeInternal node)
+        private bool IsBlack(int node)
         {
-            return (node != null && !node.IsRed);
+            return (node != -1 && !m_slots[node].IsRed);
         }
 
-        private static bool IsNullOrBlack(NodeInternal node)
+        private bool IsNullOrBlack(int node)
         {
-            return (node == null || !node.IsRed);
+            return (node == -1 || !m_slots[node].IsRed);
         }
 
-        private static bool IsRed(NodeInternal node)
+        private bool IsRed(int node)
         {
-            return (node != null && node.IsRed);
+            return (node != -1 && m_slots[node].IsRed);
         }
 
-        private static void Merge2Nodes(NodeInternal parent, NodeInternal child1, NodeInternal child2)
+        private void Merge2Nodes(int parent, int child1, int child2)
         {
             Debug.Assert(IsRed(parent), "parent must be red");
             // combing two 2-nodes into a 4-node
-            parent.IsRed = false;
-            child1.IsRed = true;
-            child2.IsRed = true;
+            m_slots[parent].IsRed = false;
+            m_slots[child1].IsRed = true;
+            m_slots[child2].IsRed = true;
         }
 
-        NodeInternal ObtainNode(T item, bool isRed = true)
+        int ObtainSlot(T item, bool isRed = true)
         {
-            if (m_poolCount > 0)
+            int index;
+            if (m_freeList >= 0)
             {
-                m_poolCount--;
-                NodeInternal node = m_pool[m_poolCount];
-                node.Item = item;
-                node.IsRed = isRed;
-                return node;
+                index = m_freeList;
+                m_freeList = m_slots[index].Parent;
             }
             else
             {
-                return new NodeInternal(item, isRed);
+                if (m_lastIndex == m_slots.Length)
+                {
+                    Array.Resize(ref m_slots, Math.Max(MinSize, GrowFactor * m_slots.Length));
+                }
+                index = m_lastIndex;
+                m_lastIndex++;
             }
+
+            m_slots[index].Item = item;
+            m_slots[index].IsRed = isRed;
+            m_slots[index].Left = -1;
+            m_slots[index].Right = -1;
+            m_slots[index].Parent = -1;
+            return index;
         }
 
-        void ReturnNode(NodeInternal node)
+        void ReturnSlot(int index)
         {
-            Debug.Assert(node.m_left == null || node.m_left.Parent != node, "Returning attached node");
-            Debug.Assert(node.m_right == null || node.m_right.Parent != node, "Returning attached node");
-            Debug.Assert(node.Parent == null || (node.Parent.m_left != node && node.Parent.m_right != node), "Returning attached node");
-            ClearNode(node);
-            ReturnNodeNoClear(node);
-        }
-
-        static void ClearNode(NodeInternal node)
-        {
-            node.Item = default(T);
-            node.Parent = null;
-            node.m_left = null;
-            node.m_right = null;
-        }
-
-        void ReturnNodeNoClear(NodeInternal node)
-        {
-            if (m_poolCount >= m_pool.Length)
-            {
-                Array.Resize(ref m_pool, Math.Max(4, 2 * m_pool.Length));
-            }
-            m_pool[m_poolCount] = node;
-            m_poolCount++;
+            m_slots[index].Item = default(T);
+            m_slots[index].Parent = m_freeList;
+            m_freeList = index;
         }
 
         // Replace the child of a parent node. 
         // If the parent node is null, replace the root.        
-        private void ReplaceChildOfNodeOrRoot(NodeInternal parent, NodeInternal child, NodeInternal newChild)
+        private void ReplaceChildOfNodeOrRoot(int parent, int child, int newChild)
         {
-            if (parent != null)
+            if (parent != -1)
             {
-                if (parent.Left == child)
+                if (m_slots[parent].Left == child)
                 {
-                    parent.Left = newChild;
+                    SetLeft(parent, newChild);
                 }
                 else
                 {
-                    parent.Right = newChild;
+                    SetRight(parent, newChild);
                 }
             }
             else
             {
-                _root = newChild;
-                if (_root != null)
+                m_root = newChild;
+                if (m_root != -1)
                 {
-                    _root.Parent = null;
+                    m_slots[m_root].Parent = -1;
                 }
             }
         }
 
         // Replace the matching node with its successor.
-        private void ReplaceNode(NodeInternal match, NodeInternal parentOfMatch, NodeInternal successor, NodeInternal parentOfsuccessor)
+        private void ReplaceNode(int match, int parentOfMatch, int successor, int parentOfsuccessor)
         {
             if (successor == match)
             {  // this node has no successor, should only happen if right child of matching node is null.
-                Debug.Assert(match.Right == null, "Right child must be null!");
-                successor = match.Left;
+                Debug.Assert(m_slots[match].Right == -1, "Right child must be null!");
+                successor = m_slots[match].Left;
             }
             else
             {
-                Debug.Assert(parentOfsuccessor != null, "parent of successor cannot be null!");
-                Debug.Assert(successor.Left == null, "Left child of successor must be null!");
-                Debug.Assert((successor.Right == null && successor.IsRed) || (successor.Right.IsRed && !successor.IsRed), "Successor must be in valid state");
-                if (successor.Right != null)
+                Debug.Assert(parentOfsuccessor != -1, "parent of successor cannot be null!");
+                Debug.Assert(m_slots[successor].Left == -1, "Left child of successor must be null!");
+                Debug.Assert((m_slots[successor].Right == -1 && m_slots[successor].IsRed) || (m_slots[m_slots[successor].Right].IsRed && !m_slots[successor].IsRed), "Successor must be in valid state");
+                if (m_slots[successor].Right != -1)
                 {
-                    successor.Right.IsRed = false;
+                    m_slots[m_slots[successor].Right].IsRed = false;
                 }
 
                 if (parentOfsuccessor != match)
                 {   // detach successor from its parent and set its right child
-                    parentOfsuccessor.Left = successor.Right;
-                    successor.Right = match.Right;
+                    SetLeft(parentOfsuccessor, m_slots[successor].Right);
+                    SetRight(successor, m_slots[match].Right);
                 }
 
-                successor.Left = match.Left;
+                SetLeft(successor, m_slots[match].Left);
             }
 
-            if (successor != null)
+            if (successor != -1)
             {
-                successor.IsRed = match.IsRed;
+                m_slots[successor].IsRed = m_slots[match].IsRed;
             }
 
             ReplaceChildOfNodeOrRoot(parentOfMatch, match, successor);
         }
 
-        internal NodeInternal FindNode(T item)
+        internal int FindNode(T item)
         {
-            NodeInternal current = _root;
-            while (current != null)
+            int current = m_root;
+            while (current != -1)
             {
-                int order = _comparer.Compare(item, current.Item);
+                int order = m_comparer.Compare(item, m_slots[current].Item);
                 if (order == 0)
                 {
                     return current;
                 }
                 else
                 {
-                    current = (order < 0) ? current.Left : current.Right;
+                    current = (order < 0) ? m_slots[current].Left : m_slots[current].Right;
                 }
             }
 
-            return null;
+            return -1;
         }
 
         //used for bithelpers. Note that this implementation is completely different 
@@ -979,18 +977,18 @@ namespace Rock.Collections
         //http://en.wikipedia.org/wiki/Binary_Tree#Methods_for_storing_binary_trees
         internal int InternalIndexOf(T item)
         {
-            NodeInternal current = _root;
+            int current = m_root;
             int count = 0;
-            while (current != null)
+            while (current != -1)
             {
-                int order = _comparer.Compare(item, current.Item);
+                int order = m_comparer.Compare(item, m_slots[current].Item);
                 if (order == 0)
                 {
                     return count;
                 }
                 else
                 {
-                    current = (order < 0) ? current.Left : current.Right;
+                    current = (order < 0) ? m_slots[current].Left : m_slots[current].Right;
                     count = (order < 0) ? (2 * count + 1) : (2 * count + 2);
                 }
             }
@@ -999,79 +997,79 @@ namespace Rock.Collections
 
         public Node FindNext(T item)
         {
-            NodeInternal current = _root;
-            while (current != null)
+            int current = m_root;
+            while (current != -1)
             {
-                int order = _comparer.Compare(item, current.Item);
+                int order = m_comparer.Compare(item, m_slots[current].Item);
                 if (order == 0)
                 {
                     return new Node(this, current).Next;
                 }
-                if(order > 0)
+                if (order > 0)
                 {
-                    if (current.m_right == null)
+                    if (m_slots[current].Right == -1)
                         return new Node(this, current).Next;
                     else
-                        current = current.m_right;
+                        current = m_slots[current].Right;
                 }
                 else
                 {
-                    if (current.m_left == null)
+                    if (m_slots[current].Left == -1)
                         return new Node(this, current);
                     else
-                        current = current.m_left;
+                        current = m_slots[current].Left;
                 }
             }
-            return new Node(this, null);
+            return new Node(this, -1);
         }
 
         public Node FindPrevious(T item)
         {
-            NodeInternal current = _root;
-            while (current != null)
+            int current = m_root;
+            while (current != -1)
             {
-                int order = _comparer.Compare(item, current.Item);
+                int order = m_comparer.Compare(item, m_slots[current].Item);
                 if (order == 0)
                 {
                     return new Node(this, current).Previous;
                 }
                 if (order > 0)
                 {
-                    if (current.m_right == null)
+                    if (m_slots[current].Right == -1)
                         return new Node(this, current);
                     else
-                        current = current.m_right;
+                        current = m_slots[current].Right;
                 }
                 else
                 {
-                    if (current.m_left == null)
+                    if (m_slots[current].Left == -1)
                         return new Node(this, current).Previous;
                     else
-                        current = current.m_left;
+                        current = m_slots[current].Left;
                 }
             }
-            return new Node(this, null);
+            return new Node(this, -1);
         }
 
-        internal NodeInternal FindRange(T from, T to)
+        internal int FindRange(T from, T to)
         {
             return FindRange(from, to, true, true);
         }
 
-        internal NodeInternal FindRange(T from, T to, bool lowerBoundActive, bool upperBoundActive)
+        internal int FindRange(T from, T to, bool lowerBoundActive, bool upperBoundActive)
         {
-            NodeInternal current = _root;
-            while (current != null)
+            int current = m_root;
+            while (current != -1)
             {
-                if (lowerBoundActive && _comparer.Compare(from, current.Item) > 0)
+                if (lowerBoundActive && m_comparer.Compare(from, m_slots[current].Item) > 0)
                 {
-                    current = current.Right;
+                    current = m_slots[current].Right;
                 }
                 else
                 {
-                    if (upperBoundActive && _comparer.Compare(to, current.Item) < 0)
+                    if (upperBoundActive && m_comparer.Compare(to, m_slots[current].Item) < 0)
                     {
-                        current = current.Left;
+                        current = m_slots[current].Left;
                     }
                     else
                     {
@@ -1080,63 +1078,63 @@ namespace Rock.Collections
                 }
             }
 
-            return null;
+            return -1;
         }
 
         internal void UpdateVersion()
         {
-            ++_version;
+            ++m_version;
         }
 
-        private static NodeInternal RotateLeft(NodeInternal node)
+        private int RotateLeft(int node)
         {
-            NodeInternal x = node.Right;
-            node.Right = x.Left;
-            x.Left = node;
+            int x = m_slots[node].Right;
+            SetRight(node, m_slots[x].Left);
+            SetLeft(x, node);
             return x;
         }
 
-        private static NodeInternal RotateLeftRight(NodeInternal node)
+        private int RotateLeftRight(int node)
         {
-            NodeInternal child = node.Left;
-            NodeInternal grandChild = child.Right;
+            int child = m_slots[node].Left;
+            int grandChild = m_slots[child].Right;
 
-            node.Left = grandChild.Right;
-            grandChild.Right = node;
-            child.Right = grandChild.Left;
-            grandChild.Left = child;
+            SetLeft(node, m_slots[grandChild].Right);
+            SetRight(grandChild, node);
+            SetRight(child, m_slots[grandChild].Left);
+            SetLeft(grandChild, child);
             return grandChild;
         }
 
-        private static NodeInternal RotateRight(NodeInternal node)
+        private int RotateRight(int node)
         {
-            NodeInternal x = node.Left;
-            node.Left = x.Right;
-            x.Right = node;
+            int x = m_slots[node].Left;
+            SetLeft(node, m_slots[x].Right);
+            SetRight(x, node);
             return x;
         }
 
-        private static NodeInternal RotateRightLeft(NodeInternal node)
+        private int RotateRightLeft(int node)
         {
-            NodeInternal child = node.Right;
-            NodeInternal grandChild = child.Left;
+            int child = m_slots[node].Right;
+            int grandChild = m_slots[child].Left;
 
-            node.Right = grandChild.Left;
-            grandChild.Left = node;
-            child.Left = grandChild.Right;
-            grandChild.Right = child;
+            SetRight(node, m_slots[grandChild].Left);
+            SetLeft(grandChild, node);
+            SetLeft(child, m_slots[grandChild].Right);
+            SetRight(grandChild, child);
             return grandChild;
         }
 
         /// <summary>
         /// Testing counter that can track rotations
         /// </summary>
-        private static TreeRotation RotationNeeded(NodeInternal parent, NodeInternal current, NodeInternal sibling)
+        private TreeRotation RotationNeeded(int parent, int current, int sibling)
         {
-            Debug.Assert(IsRed(sibling.Left) || IsRed(sibling.Right), "sibling must have at least one red child");
-            if (IsRed(sibling.Left))
+            Debug.Assert(IsRed(m_slots[sibling].Left) || IsRed(m_slots[sibling].Right), "sibling must have at least one red child");
+            if (IsRed(m_slots[sibling].Left))
             {
-                if (parent.Left == current)
+                if (m_slots[parent].Left == current)
                 {
                     return TreeRotation.RightLeftRotation;
                 }
@@ -1144,7 +1142,7 @@ namespace Rock.Collections
             }
             else
             {
-                if (parent.Left == current)
+                if (m_slots[parent].Left == current)
                 {
                     return TreeRotation.LeftRotation;
                 }
@@ -1223,16 +1221,16 @@ namespace Rock.Collections
             return set1.Comparer.Equals(set2.Comparer);
         }
 
-        private static void Split4Node(NodeInternal node)
+        private void Split4Node(int node)
         {
-            node.IsRed = true;
-            node.Left.IsRed = false;
-            node.Right.IsRed = false;
+            m_slots[node].IsRed = true;
+            m_slots[m_slots[node].Left].IsRed = false;
+            m_slots[m_slots[node].Right].IsRed = false;
         }
 
         public void TrimExcess()
         {
-            Array.Resize(ref m_pool, m_poolCount);
+            Array.Resize(ref m_slots, m_lastIndex);
         }
 
         /// <summary>
@@ -1274,18 +1272,18 @@ namespace Rock.Collections
         {
             get
             {
-                if (_root == null)
+                if (m_root == -1)
                 {
                     return default(T);
                 }
 
-                NodeInternal current = _root;
-                while (current.Left != null)
+                int current = m_root;
+                while (m_slots[current].Left != -1)
                 {
-                    current = current.Left;
+                    current = m_slots[current].Left;
                 }
 
-                return current.Item;
+                return m_slots[current].Item;
             }
         }
 
@@ -1293,18 +1291,18 @@ namespace Rock.Collections
         {
             get
             {
-                if (_root == null)
+                if (m_root == -1)
                 {
                     return default(T);
                 }
 
-                NodeInternal current = _root;
-                while (current.Right != null)
+                int current = m_root;
+                while (m_slots[current].Right != -1)
                 {
-                    current = current.Right;
+                    current = m_slots[current].Right;
                 }
 
-                return current.Item;
+                return m_slots[current].Item;
             }
         }
 
@@ -1330,11 +1328,11 @@ namespace Rock.Collections
                 throw new ArgumentNullException(nameof(info));
             }
 
-            info.AddValue(CountName, _count); //This is the length of the bucket array.
-            info.AddValue(ComparerName, _comparer, typeof(IComparer<T>));
-            info.AddValue(VersionName, _version);
+            info.AddValue(CountName, m_count); //This is the length of the bucket array.
+            info.AddValue(ComparerName, m_comparer, typeof(IComparer<T>));
+            info.AddValue(VersionName, m_version);
 
-            if (_root != null)
+            if (m_root != null)
             {
                 T[] items = new T[Count];
                 CopyTo(items, 0);
@@ -1349,22 +1347,22 @@ namespace Rock.Collections
 
         protected void OnDeserialization(Object sender)
         {
-            if (_comparer != null)
+            if (m_comparer != null)
             {
                 return; // Somebody had a dependency on this class and fixed us up before the ObjectManager got to it.
             }
 
-            if (_siInfo == null)
+            if (m_siInfo == null)
             {
                 throw new SerializationException("Serialization_InvalidOnDeser");
             }
 
-            _comparer = (IComparer<T>)_siInfo.GetValue(ComparerName, typeof(IComparer<T>));
-            int savedCount = _siInfo.GetInt32(CountName);
+            m_comparer = (IComparer<T>)m_siInfo.GetValue(ComparerName, typeof(IComparer<T>));
+            int savedCount = m_siInfo.GetInt32(CountName);
 
             if (savedCount != 0)
             {
-                T[] items = (T[])_siInfo.GetValue(ItemsName, typeof(T[]));
+                T[] items = (T[])m_siInfo.GetValue(ItemsName, typeof(T[]));
 
                 if (items == null)
                 {
@@ -1377,114 +1375,131 @@ namespace Rock.Collections
                 }
             }
 
-            _version = _siInfo.GetInt32(VersionName);
-            if (_count != savedCount)
+            m_version = m_siInfo.GetInt32(VersionName);
+            if (m_count != savedCount)
             {
                 throw new SerializationException("Serialization_MismatchedCount");
             }
 
-            _siInfo = null;
+            m_siInfo = null;
         }
         #endregion
 
         #region Enumeration helpers
-        NodeInternal GetFirst()
+        int GetFirst()
         {
-            if (_root == null)
-                return null;
+            if (m_root == -1)
+                return -1;
 
             // Slide left
-            var result = _root;
-            while (result.Left != null)
+            var result = m_root;
+            while (m_slots[result].Left != -1)
             {
-                result = result.Left;
+                result = m_slots[result].Left;
             }
             return result;
         }
 
-        NodeInternal GetLast()
+        int GetLast()
         {
-            if (_root == null)
-                return null;
+            if (m_root == -1)
+                return -1;
 
             // Slide Right
-            var result = _root;
-            while (result.Right != null)
+            var result = m_root;
+            while (m_slots[result].Right != -1)
             {
-                result = result.Right;
+                result = m_slots[result].Right;
             }
             return result;
         }
 
-        NodeInternal GetNext(NodeInternal node)
+        int GetNext(int node)
         {
             // Has right node
-            if (node.Right != null)
+            if (m_slots[node].Right != -1)
             {
                 // Move to right
-                node = node.Right;
+                node = m_slots[node].Right;
 
                 // Slide left
-                while (node.Left != null)
+                while (m_slots[node].Left != -1)
                 {
-                    node = node.Left;
+                    node = m_slots[node].Left;
                 }
                 return node;
             }
 
             // While not root
-            while (node.Parent != null)
+            while (m_slots[node].Parent != -1)
             {
                 // Is left child
-                if (node.Parent.Left == node)
+                if (m_slots[m_slots[node].Parent].Left == node)
                 {
                     // Continue with parent then
-                    node = node.Parent;
+                    node = m_slots[node].Parent;
                     return node;
                 }
                 else
                 {
                     // Is right child, go up then
-                    node = node.Parent;
+                    node = m_slots[node].Parent;
                 }
             }
-            return null;
+            return -1;
         }
 
-        NodeInternal GetPrevious(NodeInternal node)
+        int GetPrevious(int node)
         {
             // Has Left node
-            if (node.Left != null)
+            if (m_slots[node].Left != -1)
             {
                 // Move to Left
-                node = node.Left;
+                node = m_slots[node].Left;
 
                 // Slide Right
-                while (node.Right != null)
+                while (m_slots[node].Right != -1)
                 {
-                    node = node.Right;
+                    node = m_slots[node].Right;
                 }
                 return node;
             }
 
             // While not root
-            while (node.Parent != null)
+            while (m_slots[node].Parent != -1)
             {
                 // Is Right child
-                if (node.Parent.Right == node)
+                if (m_slots[m_slots[node].Parent].Right == node)
                 {
                     // Continue with parent then
-                    node = node.Parent;
+                    node = m_slots[node].Parent;
                     return node;
                 }
                 else
                 {
                     // Is Left child, go up then
-                    node = node.Parent;
+                    node = m_slots[node].Parent;
                 }
             }
-            return null;
+            return -1;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void SetLeft(int slot, int value)
+        {
+            m_slots[slot].Left = value;
+            if (value != -1)
+                m_slots[value].Parent = slot;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void SetRight(int slot, int value)
+        {
+            m_slots[slot].Right = value;
+            if (value != -1)
+                m_slots[value].Parent = slot;
+        }
+
         #endregion
 
         #region Helper Classes
@@ -1497,68 +1512,24 @@ namespace Rock.Collections
         }
 
         [Serializable]
-        internal sealed class NodeInternal
+        internal struct Slot
         {
-            public NodeInternal m_left;
-            public NodeInternal m_right;
-
-            public bool IsRed;
             public T Item;
-
-            public NodeInternal Parent;
-
-            public NodeInternal Left
-            {
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                get { return m_left; }
-
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                set
-                {
-                    m_left = value;
-                    if (m_left != null)
-                        m_left.Parent = this;
-                }
-            }
-
-            public NodeInternal Right
-            {
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                get { return m_right; }
-
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                set
-                {
-                    m_right = value;
-                    if (m_right != null)
-                        m_right.Parent = this;
-                }
-            }
-
-            public NodeInternal(T item)
-            {
-                // The default color will be red, we never need to create a black node directly.                
-                Item = item;
-                IsRed = true;
-            }
-
-            public NodeInternal(T item, bool isRed)
-            {
-                // The default color will be red, we never need to create a black node directly.                
-                Item = item;
-                IsRed = isRed;
-            }
+            public int Left;
+            public int Right;
+            public int Parent;
+            public bool IsRed;
         }
 
         public struct Node
         {
             SortedSet<T> m_tree;
-            NodeInternal m_node;
+            int m_node;
             int m_version;
 
             public bool IsNull
             {
-                get { return m_node == null; }
+                get { return m_node == -1; }
             }
 
             /// <summary>
@@ -1569,7 +1540,7 @@ namespace Rock.Collections
                 get
                 {
                     CheckVersion();
-                    return m_node.Item;
+                    return m_tree.m_slots[m_node].Item;
                 }
             }
 
@@ -1597,16 +1568,16 @@ namespace Rock.Collections
                 }
             }
 
-            internal Node(SortedSet<T> tree, NodeInternal node)
+            internal Node(SortedSet<T> tree, int node)
             {
                 m_tree = tree;
                 m_node = node;
-                m_version = tree._version;
+                m_version = tree.m_version;
             }
 
             void CheckVersion()
             {
-                if (m_version != m_tree._version)
+                if (m_version != m_tree.m_version)
                 {
                     throw new InvalidOperationException("Collection has been modified.");
                 }
@@ -1680,31 +1651,31 @@ namespace Rock.Collections
         [SuppressMessage("Microsoft.Performance", "CA1815:OverrideEqualsAndOperatorEqualsOnValueTypes", Justification = "not an expected scenario")]
         public struct Enumerator : IEnumerator<T>, IEnumerator
         {
-            private SortedSet<T> _tree;
-            private int _version;
-            private SortedSet<T>.NodeInternal _current;
+            private SortedSet<T> m_tree;
+            private int m_version;
+            private int m_index;
 
             public T Current
             {
-                get { return _current.Item; }
+                get { return m_tree.m_slots[m_index].Item; }
             }
 
             internal Enumerator(SortedSet<T> set)
             {
-                _tree = set;
-                _version = _tree._version;
-                _current = null;
+                m_tree = set;
+                m_version = m_tree.m_version;
+                m_index = -1;
             }
 
             public bool MoveNext()
             {
-                if (_version != _tree._version)
+                if (m_version != m_tree.m_version)
                 {
                     throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                 }
 
-                _current = _current == null ? _tree.GetFirst() : _tree.GetNext(_current);
-                return _current != null;
+                m_index = m_index == -1 ? m_tree.GetFirst() : m_tree.GetNext(m_index);
+                return m_index != -1;
             }
 
             void IDisposable.Dispose()
@@ -1715,52 +1686,52 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (_current == null)
+                    if (m_index == -1)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
-                    return _current.Item;
+                    return Current;
                 }
             }
 
             void IEnumerator.Reset()
             {
-                if (_version != _tree._version)
+                if (m_version != m_tree.m_version)
                 {
                     throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                 }
-                _current = null;
+                m_index = -1;
             }
         }
 
         [SuppressMessage("Microsoft.Performance", "CA1815:OverrideEqualsAndOperatorEqualsOnValueTypes", Justification = "not an expected scenario")]
         public struct ReverseEnumerator : IEnumerator<T>, IEnumerator
         {
-            private SortedSet<T> _tree;
-            private int _version;
-            private SortedSet<T>.NodeInternal _current;
+            private SortedSet<T> m_tree;
+            private int m_version;
+            private int m_index;
 
             public T Current
             {
-                get { return _current.Item; }
+                get { return m_tree.m_slots[m_index].Item; }
             }
 
             internal ReverseEnumerator(SortedSet<T> set)
             {
-                _tree = set;
-                _version = _tree._version;
-                _current = null;
+                m_tree = set;
+                m_version = m_tree.m_version;
+                m_index = -1;
             }
 
             public bool MoveNext()
             {
-                if (_version != _tree._version)
+                if (m_version != m_tree.m_version)
                 {
                     throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                 }
 
-                _current = _current == null ? _tree.GetLast() : _tree.GetPrevious(_current);
-                return _current != null;
+                m_index = m_index == -1 ? m_tree.GetLast() : m_tree.GetPrevious(m_index);
+                return m_index != -1;
             }
 
             void IDisposable.Dispose()
@@ -1771,28 +1742,22 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (_current == null)
+                    if (m_index == -1)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
-                    return _current.Item;
+                    return Current;
                 }
             }
 
             void IEnumerator.Reset()
             {
-                if (_version != _tree._version)
+                if (m_version != m_tree.m_version)
                 {
                     throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                 }
-                _current = null;
+                m_index = -1;
             }
-        }
-
-        internal struct ElementCount
-        {
-            internal int uniqueCount;
-            internal int unfoundCount;
         }
         #endregion
 
