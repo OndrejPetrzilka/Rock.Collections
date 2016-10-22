@@ -997,6 +997,62 @@ namespace Rock.Collections
             return -1;
         }
 
+        public Node FindNext(T item)
+        {
+            NodeInternal current = _root;
+            while (current != null)
+            {
+                int order = _comparer.Compare(item, current.Item);
+                if (order == 0)
+                {
+                    return new Node(this, current).Next;
+                }
+                if(order > 0)
+                {
+                    if (current.m_right == null)
+                        return new Node(this, current).Next;
+                    else
+                        current = current.m_right;
+                }
+                else
+                {
+                    if (current.m_left == null)
+                        return new Node(this, current);
+                    else
+                        current = current.m_left;
+                }
+            }
+            return new Node(this, null);
+        }
+
+        public Node FindPrevious(T item)
+        {
+            NodeInternal current = _root;
+            while (current != null)
+            {
+                int order = _comparer.Compare(item, current.Item);
+                if (order == 0)
+                {
+                    return new Node(this, current).Previous;
+                }
+                if (order > 0)
+                {
+                    if (current.m_right == null)
+                        return new Node(this, current);
+                    else
+                        current = current.m_right;
+                }
+                else
+                {
+                    if (current.m_left == null)
+                        return new Node(this, current).Previous;
+                    else
+                        current = current.m_left;
+                }
+            }
+            return new Node(this, null);
+        }
+
         internal NodeInternal FindRange(T from, T to)
         {
             return FindRange(from, to, true, true);

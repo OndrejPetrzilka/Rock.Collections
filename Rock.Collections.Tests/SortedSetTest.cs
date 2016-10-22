@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Rock.Collections;
@@ -41,6 +42,7 @@ namespace Rock.Collections.Tests
         Both One { get { return new Both().Add(1); } }
         Both Two { get { return new Both().Add(1).Add(2); } }
         Both Four { get { return new Both().Add(1).Add(2).Add(3).Add(4); } }
+        Both TenWithoutFive { get { return new Both().Add(1).Add(2).Add(3).Add(4).Add(6).Add(7).Add(8).Add(9).Add(10); } }
 
         [TestMethod]
         public void TestAdd()
@@ -63,6 +65,39 @@ namespace Rock.Collections.Tests
             {
                 x.Remove(i);
             }
+        }
+
+        [TestMethod]
+        public void FindNextTest()
+        {
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(0).Value == 1);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(1).Value == 2);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(2).Value == 3);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(3).Value == 4);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(4).Value == 6);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(5).Value == 6);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(6).Value == 7);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(8).Value == 9);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(9).Value == 10);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(10).IsNull);
+            Assert.IsTrue(TenWithoutFive.Set.FindNext(11).IsNull);
+        }
+
+        [TestMethod]
+        public void FindPrevTest()
+        {
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(0).IsNull);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(1).IsNull);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(2).Value == 1);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(3).Value == 2);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(4).Value == 3);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(5).Value == 4);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(6).Value == 4);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(7).Value == 6);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(8).Value == 7);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(9).Value == 8);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(10).Value == 9);
+            Assert.IsTrue(TenWithoutFive.Set.FindPrevious(11).Value == 10);
         }
     }
 }
