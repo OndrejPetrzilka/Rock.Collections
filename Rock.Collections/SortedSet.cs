@@ -10,6 +10,15 @@ using Rock.Collections.Internals;
 
 namespace Rock.Collections
 {
+    [Serializable]
+    internal struct Slot
+    {
+        public int Left;
+        public int Right;
+        public int Parent;
+        public bool IsRed;
+    }
+
     //
     // A binary search tree is a red-black tree if it satisfies the following red-black properties:
     // 1. Every node is either red or black
@@ -41,6 +50,7 @@ namespace Rock.Collections
         private object m_syncRoot;
         private SerializationInfo m_siInfo; //A temporary variable which we need during deserialization
         private Slot[] m_slots;
+        private T[] m_items;
         private int m_freeList;
         private int m_lastIndex;
 
@@ -113,6 +123,7 @@ namespace Rock.Collections
             m_comparer = comparer ?? Comparer<T>.Default;
             m_freeList = -1;
             m_slots = new Slot[capacity];
+            m_items = new T[capacity];
             m_root = -1;
         }
 
@@ -426,7 +437,7 @@ namespace Rock.Collections
             int order = 0;
             while (current != -1)
             {
-                order = m_comparer.Compare(item, m_slots[current].Item);
+                order = m_comparer.Compare(item, m_items[current]);
                 if (order == 0)
                 {
                     // We could have changed root node to red during the search process.
@@ -599,7 +610,7 @@ namespace Rock.Collections
                 }
 
                 // we don't need to compare any more once we found the match
-                int order = foundMatch ? -1 : m_comparer.Compare(item, m_slots[current].Item);
+                int order = foundMatch ? -1 : m_comparer.Compare(item, m_items[current]);
                 if (order == 0)
                 {
                     // save the matching node
@@ -642,7 +653,7 @@ namespace Rock.Collections
             {
                 // clear the elements so that the gc can reclaim the references.
                 // clear only up to m_lastIndex for m_slots
-                Array.Clear(m_slots, 0, m_lastIndex);
+                Array.Clear(m_items, 0, m_lastIndex);
                 m_lastIndex = 0;
                 m_count = 0;
                 m_freeList = -1;
@@ -858,13 +869,15 @@ namespace Rock.Collections
             {
                 if (m_lastIndex == m_slots.Length)
                 {
-                    Array.Resize(ref m_slots, Math.Max(MinSize, GrowFactor * m_slots.Length));
+                    var newSize = Math.Max(MinSize, GrowFactor * m_slots.Length);
+                    Array.Resize(ref m_slots, newSize);
+                    Array.Resize(ref m_items, newSize);
                 }
                 index = m_lastIndex;
                 m_lastIndex++;
             }
 
-            m_slots[index].Item = item;
+            m_items[index] = item;
             m_slots[index].IsRed = isRed;
             m_slots[index].Left = -1;
             m_slots[index].Right = -1;
@@ -874,7 +887,7 @@ namespace Rock.Collections
 
         void ReturnSlot(int index)
         {
-            m_slots[index].Item = default(T);
+            m_items[index] = default(T);
             m_slots[index].Parent = m_freeList;
             m_freeList = index;
         }
@@ -944,7 +957,7 @@ namespace Rock.Collections
             int current = m_root;
             while (current != -1)
             {
-                int order = m_comparer.Compare(item, m_slots[current].Item);
+                int order = m_comparer.Compare(item, m_items[current]);
                 if (order == 0)
                 {
                     return current;
@@ -967,7 +980,7 @@ namespace Rock.Collections
             int count = 0;
             while (current != -1)
             {
-                int order = m_comparer.Compare(item, m_slots[current].Item);
+                int order = m_comparer.Compare(item, m_items[current]);
                 if (order == 0)
                 {
                     return count;
@@ -986,7 +999,7 @@ namespace Rock.Collections
             int current = m_root;
             while (current != -1)
             {
-                int order = m_comparer.Compare(item, m_slots[current].Item);
+                int order = m_comparer.Compare(item, m_items[current]);
                 if (order == 0)
                 {
                     return new Node(this, current).Next;
@@ -1014,7 +1027,7 @@ namespace Rock.Collections
             int current = m_root;
             while (current != -1)
             {
-                int order = m_comparer.Compare(item, m_slots[current].Item);
+                int order = m_comparer.Compare(item, m_items[current]);
                 if (order == 0)
                 {
                     return new Node(this, current).Previous;
@@ -1047,13 +1060,13 @@ namespace Rock.Collections
             int current = m_root;
             while (current != -1)
             {
-                if (lowerBoundActive && m_comparer.Compare(from, m_slots[current].Item) > 0)
+                if (lowerBoundActive && m_comparer.Compare(from, m_items[current]) > 0)
                 {
                     current = m_slots[current].Right;
                 }
                 else
                 {
-                    if (upperBoundActive && m_comparer.Compare(to, m_slots[current].Item) < 0)
+                    if (upperBoundActive && m_comparer.Compare(to, m_items[current]) < 0)
                     {
                         current = m_slots[current].Left;
                     }
@@ -1219,6 +1232,7 @@ namespace Rock.Collections
         public void TrimExcess()
         {
             Array.Resize(ref m_slots, m_lastIndex);
+            Array.Resize(ref m_items, m_lastIndex);
         }
 
         /// <summary>
@@ -1271,7 +1285,7 @@ namespace Rock.Collections
                     current = m_slots[current].Left;
                 }
 
-                return m_slots[current].Item;
+                return m_items[current];
             }
         }
 
@@ -1290,7 +1304,7 @@ namespace Rock.Collections
                     current = m_slots[current].Right;
                 }
 
-                return m_slots[current].Item;
+                return m_items[current];
             }
         }
 
@@ -1499,16 +1513,6 @@ namespace Rock.Collections
             LeftRightRotation = 4,
         }
 
-        [Serializable]
-        internal struct Slot
-        {
-            public T Item;
-            public int Left;
-            public int Right;
-            public int Parent;
-            public bool IsRed;
-        }
-
         public struct Node
         {
             SortedSet<T> m_tree;
@@ -1528,7 +1532,7 @@ namespace Rock.Collections
                 get
                 {
                     CheckVersion();
-                    return m_tree.m_slots[m_node].Item;
+                    return m_tree.m_items[m_node];
                 }
             }
 
@@ -1645,7 +1649,7 @@ namespace Rock.Collections
 
             public T Current
             {
-                get { return m_tree.m_slots[m_index].Item; }
+                get { return m_tree.m_items[m_index]; }
             }
 
             internal Enumerator(SortedSet<T> set)
@@ -1701,7 +1705,7 @@ namespace Rock.Collections
 
             public T Current
             {
-                get { return m_tree.m_slots[m_index].Item; }
+                get { return m_tree.m_items[m_index]; }
             }
 
             internal ReverseEnumerator(SortedSet<T> set)
