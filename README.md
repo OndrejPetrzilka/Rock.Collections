@@ -17,16 +17,18 @@ Purpose of this repository is to provide some of the collections, which are miss
 ## `SortedSet<T>`
 * Items are enumerated without allocations
 * Items are added and removed without unnecessary allocations
+* Items are stored in continuous array
 * Manual iteration over collection is exposed through `FirstNode`, `LastNode`, `Node.Next` and `Node.Previous`
-* Based on .NET Core source code, added parent reference to each node
-* Nodes are pooled to prevent unnecessary allocations
-* Additional memory overhead: 4/8 B per item (compared to classic SortedSet)
-* Performance overhead: ~20% slower removals (compared to classic SortedSet)
+* Based on .NET Core source code, added parent reference to each node, reimplemented on array (it was on heap)
+* Additional memory overhead: none, it uses less memory (not yet measured exactly)
+* Performance overhead: ~60% slower removals (compared to classic SortedSet)
+* It might be possible to optimize it with VS "15" and [ref returns/locals](https://github.com/dotnet/roslyn/issues/118)
 * Operation complexity: Add/Remove/Contains are O(log2(n)), same as classic SortedSet; Clear is O(n)
+* Clear operation is technically O(n), but very fast, it's only Array.Clear (same as HashSet for example)
 
 ## How to use
 * Download the files and add it to your project
-* Or download whole shared project and that to your project
+* Or download whole project and that to your project
 
 ## Future
 * Range enumerators/readers for OrderedDictionary, SortedSet
