@@ -27,7 +27,7 @@ Purpose of this repository is to provide some of the collections, which are miss
 
 ## How to use
 * Download the files and add it to your project
-* Or download whole shared project and that to your project
+* Or download whole project and that to your project
 
 ## Future
 * Range enumerators/readers for OrderedDictionary, SortedSet
