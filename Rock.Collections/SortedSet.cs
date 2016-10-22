@@ -868,7 +868,7 @@ namespace Rock.Collections
             if (m_freeList >= 0)
             {
                 index = m_freeList;
-                m_freeList = m_slots[index].Parent;
+                m_freeList = m_slots[index].Parent; // Next free node is stored in Parent field
             }
             else
             {
@@ -893,7 +893,7 @@ namespace Rock.Collections
         void ReturnSlot(int index)
         {
             m_items[index] = default(T);
-            m_slots[index].Parent = m_freeList;
+            m_slots[index].Parent = m_freeList; // Next free node is stored in Parent field
             m_freeList = index;
         }
 
