@@ -7,6 +7,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using Rock.Collections.Internals;
 
@@ -230,7 +231,7 @@ namespace Rock.Collections
                 // there are no resizes here because we already set capacity above 
                 for (int i = 0; i < array.Length; i++)
                 {
-                    AddIfNotPresent(array[i]);
+                    Add(array[i]);
                 }
             }
             else
@@ -261,7 +262,7 @@ namespace Rock.Collections
         /// <param name="item">item to add</param> 
         void ICollection<T>.Add(T item)
         {
-            AddIfNotPresent(item);
+            Add(item);
         }
 
         /// <summary>
@@ -337,7 +338,7 @@ namespace Rock.Collections
 
             foreach (T item in other)
             {
-                AddIfNotPresent(item);
+                Add(item);
             }
         }
 
@@ -380,9 +381,6 @@ namespace Rock.Collections
                             // subsequent iterations; update 'next' pointers
                             m_slots[last].next = m_slots[i].next;
                         }
-                        m_slots[i].hashCode = -1;
-                        m_slots[i].value = default(T);
-                        m_slots[i].next = m_freeList;
 
                         // Connect linked list
                         if (m_firstOrderIndex == i) // Is first
@@ -405,6 +403,9 @@ namespace Rock.Collections
                             m_slots[prev].nextOrder = next;
                         }
 
+                        m_slots[i].hashCode = -1;
+                        m_slots[i].value = default(T);
+                        m_slots[i].next = m_freeList;
                         m_slots[i].previousOrder = -1;
                         m_slots[i].nextOrder = -1;
 
@@ -449,17 +450,6 @@ namespace Rock.Collections
         #endregion
 
         #region HashSet methods 
-
-        /// <summary> 
-        /// Add item to this HashSet. Returns bool indicating whether item was added (won't be 
-        /// added if already present)
-        /// </summary> 
-        /// <param name="item"></param>
-        /// <returns>true if added, false if already present</returns>
-        public bool Add(T item)
-        {
-            return AddIfNotPresent(item);
-        }
 
         /// <summary>
         /// Copies the elements to an array.
@@ -873,13 +863,13 @@ namespace Rock.Collections
 
         }
 
-        /// <summary>
-        /// Adds value to HashSet if not contained already
-        /// Returns true if added and false if already present 
-        /// </summary>
-        /// <param name="value">value to find</param> 
-        /// <returns></returns> 
-        private bool AddIfNotPresent(T value)
+        /// <summary> 
+        /// Add item to this HashSet. Returns bool indicating whether item was added (won't be 
+        /// added if already present)
+        /// </summary> 
+        /// <param name="item"></param>
+        /// <returns>true if added, false if already present</returns>
+        public bool Add(T value)
         {
             if (m_buckets == null)
             {
@@ -940,6 +930,7 @@ namespace Rock.Collections
         /// </summary> 
         /// <param name="item"></param>
         /// <returns>hash code</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private int InternalGetHashCode(T item)
         {
             // This check prevents boxing of value types to compare to null
