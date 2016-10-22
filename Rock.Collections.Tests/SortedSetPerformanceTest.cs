@@ -15,25 +15,43 @@ namespace Rock.Tests.Base
         static readonly int IterCount = 200000;
         static IEnumerable<int> m_warm = Enumerable.Range(0, IterCount);
 
-        static NetSortedSet m_warmNet = new NetSortedSet(m_warm);
-        static RockSortedSet m_warmRock = new RockSortedSet(m_warm);
+        static NetSortedSet m_warmNet;
+        static RockSortedSet m_warmRock;
 
-        static NetSortedSet m_warmNetFull = new NetSortedSet(m_warm);
-        static RockSortedSet m_warmRockFull = new RockSortedSet(m_warm);
+        static NetSortedSet m_warmNetFull;
+        static RockSortedSet m_warmRockFull;
 
         static SortedSetPerformanceTest()
         {
+            m_warmNet = new NetSortedSet();
+            m_warmRock = new RockSortedSet();
+            m_warmNetFull = new NetSortedSet(m_warm);
+            m_warmRockFull = new RockSortedSet(m_warm);
+
             m_warmNet.Clear();
             m_warmRock.Clear();
-
             new SortedSetPerformanceTest().TestAddDotNet();
             new SortedSetPerformanceTest().TestAddRock();
+            new SortedSetPerformanceTest().TestRemoveDotNet();
+            new SortedSetPerformanceTest().TestRemoveRock();
+
+            m_warmNet.Clear();
+            m_warmRock.Clear();
+            m_warmNetFull.Clear();
+            m_warmRockFull.Clear();
+            for (int i = 0; i < IterCount; i++)
+            {
+                m_warmNetFull.Add(i);
+            }
+            for (int i = 0; i < IterCount; i++)
+            {
+                m_warmRockFull.Add(i);
+            }
         }
 
         [TestMethod]
         public void TestAddDotNet()
         {
-            m_warmNet.Clear();
             for (int i = 0; i < IterCount; i++)
             {
                 m_warmNet.Add(i);
@@ -43,7 +61,6 @@ namespace Rock.Tests.Base
         [TestMethod]
         public void TestAddRock()
         {
-            m_warmRock.Clear();
             for (int i = 0; i < IterCount; i++)
             {
                 m_warmRock.Add(i);
