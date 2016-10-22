@@ -432,6 +432,7 @@ namespace Rock.Collections
             //even if we don't actually add to the set, we may be altering its structure (by doing rotations
             //and such). so update version to disable any enumerators/subsets working on it
             m_version++;
+            var slots = this.m_slots;
 
             int order = 0;
             while (current != -1)
@@ -441,46 +442,48 @@ namespace Rock.Collections
                 {
                     // We could have changed root node to red during the search process.
                     // We need to set it to black before we return.
-                    m_slots[m_root].IsRed = false;
+                    slots[m_root].IsRed = false;
                     return false;
                 }
 
                 // split a 4-node into two 2-nodes                
-                if (Is4Node(current))
+                if (Is4Node(slots, current))
                 {
-                    Split4Node(current);
+                    Split4Node(slots, current);
                     // We could have introduced two consecutive red nodes after split. Fix that by rotation.
-                    if (IsRed(parent))
+                    if (IsRed(slots, parent))
                     {
-                        InsertionBalance(current, ref parent, grandParent, greatGrandParent);
+                        InsertionBalance(slots, ref m_root, current, ref parent, grandParent, greatGrandParent);
                     }
                 }
                 greatGrandParent = grandParent;
                 grandParent = parent;
                 parent = current;
-                current = (order < 0) ? m_slots[current].Left : m_slots[current].Right;
+                current = (order < 0) ? slots[current].Left : slots[current].Right;
             }
 
             Debug.Assert(parent != -1, "Parent node cannot be null here!");
             // ready to insert the new node
             int node = ObtainSlot(item);
+            slots = this.m_slots;
+            
             if (order > 0)
             {
-                SetRight(parent, node);
+                SetRight(slots, parent, node);
             }
             else
             {
-                SetLeft(parent, node);
+                SetLeft(slots, parent, node);
             }
 
             // the new node will be red, so we will need to adjust the colors if parent node is also red
-            if (m_slots[parent].IsRed)
+            if (slots[parent].IsRed)
             {
-                InsertionBalance(node, ref parent, grandParent, greatGrandParent);
+                InsertionBalance(slots, ref m_root, node, ref parent, grandParent, greatGrandParent);
             }
 
             // Root node is always black
-            m_slots[m_root].IsRed = false;
+            slots[m_root].IsRed = false;
             ++m_count;
             return true;
         }
@@ -509,6 +512,7 @@ namespace Rock.Collections
             //and such). so update version to disable any enumerators/subsets working on it
             m_version++;
 
+            var slots = m_slots; // local copy helps a lot
             int current = m_root;
             int parent = -1;
             int grandParent = -1;
@@ -517,34 +521,36 @@ namespace Rock.Collections
             bool foundMatch = false;
             while (current != -1)
             {
-                if (Is2Node(current))
-                { // fix up 2-Node
+                if (Is2Node(slots, current))
+                { 
+                    // fix up 2-Node
                     if (parent == -1)
-                    {   // current is root. Mark it as red
-                        m_slots[current].IsRed = true;
+                    {   
+                        // current is root. Mark it as red
+                        slots[current].IsRed = true;
                     }
                     else
                     {
-                        int sibling = GetSibling(current, parent);
-                        if (m_slots[sibling].IsRed)
+                        int sibling = GetSibling(slots, current, parent);
+                        if (slots[sibling].IsRed)
                         {
                             // If parent is a 3-node, flip the orientation of the red link. 
                             // We can achieve this by a single rotation        
                             // This case is converted to one of other cased below.
-                            Debug.Assert(!m_slots[parent].IsRed, "parent must be a black node!");
-                            if (m_slots[parent].Right == sibling)
+                            Debug.Assert(!slots[parent].IsRed, "parent must be a black node!");
+                            if (slots[parent].Right == sibling)
                             {
-                                RotateLeft(parent);
+                                RotateLeft(slots, parent);
                             }
                             else
                             {
-                                RotateRight(parent);
+                                RotateRight(slots, parent);
                             }
 
-                            m_slots[parent].IsRed = true;
-                            m_slots[sibling].IsRed = false;    // parent's color
+                            slots[parent].IsRed = true;
+                            slots[sibling].IsRed = false;    // parent's color
                             // sibling becomes child of grandParent or root after rotation. Update link from grandParent or root
-                            ReplaceChildOfNodeOrRoot(grandParent, parent, sibling);
+                            ReplaceChildOfNodeOrRoot(slots, ref m_root, grandParent, parent, sibling);
                             // sibling will become grandParent of current node 
                             grandParent = sibling;
                             if (parent == match)
@@ -553,13 +559,13 @@ namespace Rock.Collections
                             }
 
                             // update sibling, this is necessary for following processing
-                            sibling = (m_slots[parent].Left == current) ? m_slots[parent].Right : m_slots[parent].Left;
+                            sibling = (slots[parent].Left == current) ? slots[parent].Right : slots[parent].Left;
                         }
-                        Debug.Assert(sibling != -1 && m_slots[sibling].IsRed == false, "sibling must not be null and it must be black!");
+                        Debug.Assert(sibling != -1 && slots[sibling].IsRed == false, "sibling must not be null and it must be black!");
 
-                        if (Is2Node(sibling))
+                        if (Is2Node(slots, sibling))
                         {
-                            Merge2Nodes(parent, current, sibling);
+                            Merge2Nodes(slots, parent, current, sibling);
                         }
                         else
                         {
@@ -567,44 +573,44 @@ namespace Rock.Collections
                             // We can change the color of current to red by some rotation.
 
                             int newGrandParent = -1;
-                            Debug.Assert(IsRed(m_slots[sibling].Left) || IsRed(m_slots[sibling].Right), "sibling must have at least one red child");
-                            if (IsRed(m_slots[sibling].Left))
+                            Debug.Assert(IsRed(slots, slots[sibling].Left) || IsRed(slots, slots[sibling].Right), "sibling must have at least one red child");
+                            if (IsRed(slots, slots[sibling].Left))
                             {
-                                if (m_slots[parent].Left == current)
+                                if (slots[parent].Left == current)
                                 {
-                                    Debug.Assert(m_slots[parent].Right == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(m_slots[m_slots[sibling].Left].IsRed, "Left child of sibling must be red!");
-                                    newGrandParent = RotateRightLeft(parent);
+                                    Debug.Assert(slots[parent].Right == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(slots[slots[sibling].Left].IsRed, "Left child of sibling must be red!");
+                                    newGrandParent = RotateRightLeft(slots, parent);
                                 }
                                 else
                                 {
-                                    Debug.Assert(m_slots[parent].Left == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(m_slots[m_slots[sibling].Left].IsRed, "Left child of sibling must be red!");
-                                    m_slots[m_slots[sibling].Left].IsRed = false;
-                                    newGrandParent = RotateRight(parent);
+                                    Debug.Assert(slots[parent].Left == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(slots[slots[sibling].Left].IsRed, "Left child of sibling must be red!");
+                                    slots[slots[sibling].Left].IsRed = false;
+                                    newGrandParent = RotateRight(slots, parent);
                                 }
                             }
                             else
                             {
-                                if (m_slots[parent].Left == current)
+                                if (slots[parent].Left == current)
                                 {
-                                    Debug.Assert(m_slots[parent].Right == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(m_slots[m_slots[sibling].Right].IsRed, "Right child of sibling must be red!");
-                                    m_slots[m_slots[sibling].Right].IsRed = false;
-                                    newGrandParent = RotateLeft(parent);
+                                    Debug.Assert(slots[parent].Right == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(slots[slots[sibling].Right].IsRed, "Right child of sibling must be red!");
+                                    slots[slots[sibling].Right].IsRed = false;
+                                    newGrandParent = RotateLeft(slots, parent);
                                 }
                                 else
                                 {
-                                    Debug.Assert(m_slots[parent].Left == sibling, "sibling must be left child of parent!");
-                                    Debug.Assert(m_slots[m_slots[sibling].Right].IsRed, "Right child of sibling must be red!");
-                                    newGrandParent = RotateLeftRight(parent);
+                                    Debug.Assert(slots[parent].Left == sibling, "sibling must be left child of parent!");
+                                    Debug.Assert(slots[slots[sibling].Right].IsRed, "Right child of sibling must be red!");
+                                    newGrandParent = RotateLeftRight(slots, parent);
                                 }
                             }
                             
-                            m_slots[newGrandParent].IsRed = m_slots[parent].IsRed;
-                            m_slots[parent].IsRed = false;
-                            m_slots[current].IsRed = true;
-                            ReplaceChildOfNodeOrRoot(grandParent, parent, newGrandParent);
+                            slots[newGrandParent].IsRed = slots[parent].IsRed;
+                            slots[parent].IsRed = false;
+                            slots[current].IsRed = true;
+                            ReplaceChildOfNodeOrRoot(slots, ref m_root, grandParent, parent, newGrandParent);
                             if (parent == match)
                             {
                                 parentOfMatch = newGrandParent;
@@ -629,25 +635,25 @@ namespace Rock.Collections
 
                 if (order < 0)
                 {
-                    current = m_slots[current].Left;
+                    current = slots[current].Left;
                 }
                 else
                 {
-                    current = m_slots[current].Right;       // continue the search in  right sub tree after we find a match
+                    current = slots[current].Right;       // continue the search in  right sub tree after we find a match
                 }
             }
 
             // move successor to the matching node position and replace links
             if (match != -1)
             {
-                ReplaceNode(match, parentOfMatch, parent, grandParent);
+                ReplaceNode(slots, ref m_root, match, parentOfMatch, parent, grandParent);
                 --m_count;
                 ReturnSlot(match);
             }
 
             if (m_root != -1)
             {
-                m_slots[m_root].IsRed = false;
+                slots[m_root].IsRed = false;
             }
             return foundMatch;
         }
@@ -790,7 +796,8 @@ namespace Rock.Collections
 
         #region Tree Specific Operations
 
-        private int GetSibling(int node, int parent)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int GetSibling(Slot[] m_slots, int node, int parent)
         {
             if (m_slots[parent].Left == node)
             {
@@ -803,7 +810,8 @@ namespace Rock.Collections
         // It doesn't matter if we keep grandParent and greatGrantParent up-to-date 
         // because we won't need to split again in the next node.
         // By the time we need to split again, everything will be correctly set.
-        private void InsertionBalance(int current, ref int parent, int grandParent, int greatGrandParent)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void InsertionBalance(Slot[] m_slots, ref int m_root, int current, ref int parent, int grandParent, int greatGrandParent)
         {
             Debug.Assert(grandParent != -1, "Grand parent cannot be null here!");
             bool parentIsOnRight = (m_slots[grandParent].Right == parent);
@@ -812,11 +820,11 @@ namespace Rock.Collections
             int newChildOfGreatGrandParent;
             if (parentIsOnRight == currentIsOnRight)
             { // same orientation, single rotation
-                newChildOfGreatGrandParent = currentIsOnRight ? RotateLeft(grandParent) : RotateRight(grandParent);
+                newChildOfGreatGrandParent = currentIsOnRight ? RotateLeft(m_slots, grandParent) : RotateRight(m_slots, grandParent);
             }
             else
             {  // different orientation, double rotation
-                newChildOfGreatGrandParent = currentIsOnRight ? RotateLeftRight(grandParent) : RotateRightLeft(grandParent);
+                newChildOfGreatGrandParent = currentIsOnRight ? RotateLeftRight(m_slots, grandParent) : RotateRightLeft(m_slots, grandParent);
                 // current node now becomes the child of greatgrandparent 
                 parent = greatGrandParent;
             }
@@ -824,44 +832,51 @@ namespace Rock.Collections
             m_slots[grandParent].IsRed = true;
             m_slots[newChildOfGreatGrandParent].IsRed = false;
 
-            ReplaceChildOfNodeOrRoot(greatGrandParent, grandParent, newChildOfGreatGrandParent);
+            ReplaceChildOfNodeOrRoot(m_slots, ref m_root, greatGrandParent, grandParent, newChildOfGreatGrandParent);
         }
 
-        private bool Is2Node(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool Is2Node(Slot[] m_slots, int node)
         {
             Debug.Assert(node != -1, "node cannot be null!");
-            return IsBlack(node) && IsNullOrBlack(m_slots[node].Left) && IsNullOrBlack(m_slots[node].Right);
+            return IsBlack(m_slots, node) && IsNullOrBlack(m_slots, m_slots[node].Left) && IsNullOrBlack(m_slots, m_slots[node].Right);
         }
 
-        private bool Is4Node(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool Is4Node(Slot[] m_slots, int node)
         {
-            return IsRed(m_slots[node].Left) && IsRed(m_slots[node].Right);
+            return IsRed(m_slots, m_slots[node].Left) && IsRed(m_slots, m_slots[node].Right);
         }
 
-        private bool IsBlack(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsBlack(Slot[] m_slots, int node)
         {
             return (node != -1 && !m_slots[node].IsRed);
         }
 
-        private bool IsNullOrBlack(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsNullOrBlack(Slot[] m_slots, int node)
         {
             return (node == -1 || !m_slots[node].IsRed);
         }
 
-        private bool IsRed(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsRed(Slot[] m_slots, int node)
         {
             return (node != -1 && m_slots[node].IsRed);
         }
 
-        private void Merge2Nodes(int parent, int child1, int child2)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void Merge2Nodes(Slot[] m_slots, int parent, int child1, int child2)
         {
-            Debug.Assert(IsRed(parent), "parent must be red");
+            Debug.Assert(IsRed(m_slots, parent), "parent must be red");
             // combing two 2-nodes into a 4-node
             m_slots[parent].IsRed = false;
             m_slots[child1].IsRed = true;
             m_slots[child2].IsRed = true;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         int ObtainSlot(T item, bool isRed = true)
         {
             int index;
@@ -890,6 +905,7 @@ namespace Rock.Collections
             return index;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void ReturnSlot(int index)
         {
             m_items[index] = default(T);
@@ -899,17 +915,18 @@ namespace Rock.Collections
 
         // Replace the child of a parent node. 
         // If the parent node is null, replace the root.        
-        private void ReplaceChildOfNodeOrRoot(int parent, int child, int newChild)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ReplaceChildOfNodeOrRoot(Slot[] m_slots, ref int m_root, int parent, int child, int newChild)
         {
             if (parent != -1)
             {
                 if (m_slots[parent].Left == child)
                 {
-                    SetLeft(parent, newChild);
+                    SetLeft(m_slots, parent, newChild);
                 }
                 else
                 {
-                    SetRight(parent, newChild);
+                    SetRight(m_slots, parent, newChild);
                 }
             }
             else
@@ -923,7 +940,8 @@ namespace Rock.Collections
         }
 
         // Replace the matching node with its successor.
-        private void ReplaceNode(int match, int parentOfMatch, int successor, int parentOfsuccessor)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ReplaceNode(Slot[] m_slots, ref int m_root, int match, int parentOfMatch, int successor, int parentOfsuccessor)
         {
             if (successor == match)
             {  // this node has no successor, should only happen if right child of matching node is null.
@@ -942,11 +960,11 @@ namespace Rock.Collections
 
                 if (parentOfsuccessor != match)
                 {   // detach successor from its parent and set its right child
-                    SetLeft(parentOfsuccessor, m_slots[successor].Right);
-                    SetRight(successor, m_slots[match].Right);
+                    SetLeft(m_slots, parentOfsuccessor, m_slots[successor].Right);
+                    SetRight(m_slots, successor, m_slots[match].Right);
                 }
 
-                SetLeft(successor, m_slots[match].Left);
+                SetLeft(m_slots, successor, m_slots[match].Left);
             }
 
             if (successor != -1)
@@ -954,7 +972,7 @@ namespace Rock.Collections
                 m_slots[successor].IsRed = m_slots[match].IsRed;
             }
 
-            ReplaceChildOfNodeOrRoot(parentOfMatch, match, successor);
+            ReplaceChildOfNodeOrRoot(m_slots, ref m_root, parentOfMatch, match, successor);
         }
 
         internal int FindNode(T item)
@@ -1085,50 +1103,49 @@ namespace Rock.Collections
             return -1;
         }
 
-        internal void UpdateVersion()
-        {
-            ++m_version;
-        }
-
-        private int RotateLeft(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int RotateLeft(Slot[] m_slots, int node)
         {
             int x = m_slots[node].Right;
-            SetRight(node, m_slots[x].Left);
+            SetRight(m_slots, node, m_slots[x].Left);
             m_slots[x].Left = node;
             m_slots[node].Parent = x;
             return x;
         }
 
-        private int RotateLeftRight(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int RotateLeftRight(Slot[] m_slots, int node)
         {
             int child = m_slots[node].Left;
             int grandChild = m_slots[child].Right;
 
-            SetLeft(node, m_slots[grandChild].Right);
-            SetRight(grandChild, node);
-            SetRight(child, m_slots[grandChild].Left);
-            SetLeft(grandChild, child);
+            SetLeft(m_slots, node, m_slots[grandChild].Right);
+            SetRight(m_slots, grandChild, node);
+            SetRight(m_slots, child, m_slots[grandChild].Left);
+            SetLeft(m_slots, grandChild, child);
             return grandChild;
         }
 
-        private int RotateRight(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int RotateRight(Slot[] m_slots, int node)
         {
             int x = m_slots[node].Left;
-            SetLeft(node, m_slots[x].Right);
+            SetLeft(m_slots, node, m_slots[x].Right);
             m_slots[x].Right = node;
             m_slots[node].Parent = x;
             return x;
         }
 
-        private int RotateRightLeft(int node)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int RotateRightLeft(Slot[] m_slots, int node)
         {
             int child = m_slots[node].Right;
             int grandChild = m_slots[child].Left;
 
-            SetRight(node, m_slots[grandChild].Left);
-            SetLeft(grandChild, node);
-            SetLeft(child, m_slots[grandChild].Right);
-            SetRight(grandChild, child);
+            SetRight(m_slots, node, m_slots[grandChild].Left);
+            SetLeft(m_slots, grandChild, node);
+            SetLeft(m_slots, child, m_slots[grandChild].Right);
+            SetRight(m_slots, grandChild, child);
             return grandChild;
         }
 
@@ -1203,7 +1220,7 @@ namespace Rock.Collections
             return set1.Comparer.Equals(set2.Comparer);
         }
 
-        private void Split4Node(int node)
+        private static void Split4Node(Slot[] m_slots, int node)
         {
             m_slots[node].IsRed = true;
             m_slots[m_slots[node].Left].IsRed = false;
@@ -1468,7 +1485,7 @@ namespace Rock.Collections
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void SetLeft(int slot, int value)
+        static void SetLeft(Slot[] m_slots, int slot, int value)
         {
             m_slots[slot].Left = value;
             if (value != -1)
@@ -1476,7 +1493,7 @@ namespace Rock.Collections
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void SetRight(int slot, int value)
+        static void SetRight(Slot[] m_slots, int slot, int value)
         {
             m_slots[slot].Right = value;
             if (value != -1)
