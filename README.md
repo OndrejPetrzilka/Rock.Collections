@@ -21,8 +21,7 @@ Purpose of this repository is to provide some of the collections, which are miss
 * Manual iteration over collection is exposed through `FirstNode`, `LastNode`, `Node.Next` and `Node.Previous`
 * Based on .NET Core source code, added parent reference to each node, reimplemented on array (it was on heap)
 * Additional memory overhead: none, it uses less memory (not yet measured exactly)
-* Performance overhead: ~60% slower removals (compared to classic SortedSet)
-* It might be possible to optimize it with VS "15" and [ref returns/locals](https://github.com/dotnet/roslyn/issues/118)
+* Performance overhead: Remove ~30% slower, Add ~20% faster when capacity is sufficient (compared to classic SortedSet)
 * Operation complexity: Add/Remove/Contains are O(log2(n)), same as classic SortedSet; Clear is O(n)
 * Clear operation is technically O(n), but very fast, it's only Array.Clear (same as HashSet for example)
 
