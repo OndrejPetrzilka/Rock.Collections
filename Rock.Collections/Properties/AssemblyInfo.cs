@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Rock.Collections.Helper")]
+[assembly: AssemblyTitle("Rock.Collections")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("Rock.Collections.Helper")]
+[assembly: AssemblyProduct("Rock.Collections")]
 [assembly: AssemblyCopyright("Copyright ©  2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("d15a2237-c9e3-420b-acec-8cff1b31dd18")]
+[assembly: Guid("7093891e-2f3e-4fe1-b855-b421c72b8cbf")]
 
 // Version information for an assembly consists of the following four values:
 //

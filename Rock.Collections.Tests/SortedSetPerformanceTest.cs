@@ -12,7 +12,7 @@ namespace Rock.Tests.Base
     [TestClass]
     public class SortedSetPerformanceTest
     {
-        static readonly int IterCount = 200000;
+        static readonly int IterCount = 400000;
         static IEnumerable<int> m_warm = Enumerable.Range(0, IterCount);
 
         static NetSortedSet m_warmNet;

@@ -13,7 +13,7 @@ namespace Rock.Collections.Tests
     {
         class Both
         {
-            public LinkedList<int> List = new LinkedList<int>();
+            public List<int> List = new List<int>();
             public SortedSet<int> Set = new SortedSet<int>();
 
             public int[] CopiedData
@@ -28,12 +28,15 @@ namespace Rock.Collections.Tests
 
             private void Validate()
             {
+                List.Sort();
                 Assert.IsTrue(Enumerable.SequenceEqual(List, Set));
-                Assert.IsTrue(Enumerable.SequenceEqual(List.Reverse(), Set.Reversed));
                 Assert.IsTrue(Enumerable.SequenceEqual(List, CopiedData));
+
+                List.Reverse();
+                Assert.IsTrue(Enumerable.SequenceEqual(List, Set.Reversed));
             }
 
-            public Both Add(int item) { if (!List.Contains(item)) { List.AddLast(item); } Set.Add(item); Validate(); return this; }
+            public Both Add(int item) { if (!List.Contains(item)) { List.Add(item); } Set.Add(item); Validate(); return this; }
             public Both Remove(int item) { List.Remove(item); Set.Remove(item); Validate(); return this; }
             public Both Contains(int item) { Assert.IsTrue(List.Contains(item) == Set.Contains(item)); return this; }
         }
@@ -53,6 +56,7 @@ namespace Rock.Collections.Tests
         [TestMethod]
         public void TestAddRemove()
         {
+            New.Add(1).Add(2).Add(3).Remove(2).Add(4).Add(0).Add(-20).Add(5);
             New.Add(1).Add(2).Add(3).Remove(2).Add(4).Contains(2).Contains(3);
             New.Add(1).Add(2).Add(3).Remove(2).Add(4).Remove(4).Remove(3).Remove(1).Remove(2);
             New.Add(1).Add(2).Add(3).Remove(2).Add(4).Remove(4).Remove(3).Remove(1).Remove(2).Add(5);

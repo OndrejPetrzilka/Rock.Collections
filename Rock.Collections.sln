@@ -3,17 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "Rock.Collections", "Rock.Collections\Rock.Collections.shproj", "{EC4F7D06-6FCA-47E5-B4B2-15185D39C5B1}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rock.Collections.Tests", "Rock.Collections.Tests\Rock.Collections.Tests.csproj", "{49A84905-CB14-425E-A676-58B2485DDD5D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rock.Collections.Helper", "Rock.Collections.Helper\Rock.Collections.Helper.csproj", "{D15A2237-C9E3-420B-ACEC-8CFF1B31DD18}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rock.Collections", "Rock.Collections\Rock.Collections.csproj", "{7093891E-2F3E-4FE1-B855-B421C72B8CBF}"
 EndProject
 Global
-	GlobalSection(SharedMSBuildProjectFiles) = preSolution
-		Rock.Collections\Rock.Collections.projitems*{d15a2237-c9e3-420b-acec-8cff1b31dd18}*SharedItemsImports = 4
-		Rock.Collections\Rock.Collections.projitems*{ec4f7d06-6fca-47e5-b4b2-15185d39c5b1}*SharedItemsImports = 13
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
@@ -23,10 +17,10 @@ Global
 		{49A84905-CB14-425E-A676-58B2485DDD5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{49A84905-CB14-425E-A676-58B2485DDD5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{49A84905-CB14-425E-A676-58B2485DDD5D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D15A2237-C9E3-420B-ACEC-8CFF1B31DD18}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D15A2237-C9E3-420B-ACEC-8CFF1B31DD18}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D15A2237-C9E3-420B-ACEC-8CFF1B31DD18}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D15A2237-C9E3-420B-ACEC-8CFF1B31DD18}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7093891E-2F3E-4FE1-B855-B421C72B8CBF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7093891E-2F3E-4FE1-B855-B421C72B8CBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7093891E-2F3E-4FE1-B855-B421C72B8CBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7093891E-2F3E-4FE1-B855-B421C72B8CBF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

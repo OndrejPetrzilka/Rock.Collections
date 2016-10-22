@@ -58,9 +58,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Rock.Collections.Helper\Rock.Collections.Helper.csproj">
-      <Project>{d15a2237-c9e3-420b-acec-8cff1b31dd18}</Project>
-      <Name>Rock.Collections.Helper</Name>
+    <ProjectReference Include="..\Rock.Collections\Rock.Collections.csproj">
+      <Project>{7093891e-2f3e-4fe1-b855-b421c72b8cbf}</Project>
+      <Name>Rock.Collections</Name>
     </ProjectReference>
   </ItemGroup>
   <Choose>
