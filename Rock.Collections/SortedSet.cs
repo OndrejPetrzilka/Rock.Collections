@@ -1252,11 +1252,6 @@ namespace Rock.Collections
             }
         }
 
-        public Node RootNode
-        {
-            get { return new Node(this, _root); }
-        }
-
         public Node FirstNode
         {
             get { return new Node(this, GetFirst()); }
@@ -1510,38 +1505,38 @@ namespace Rock.Collections
                 get { return m_node == null; }
             }
 
+            /// <summary>
+            /// Gets node value.
+            /// </summary>
             public T Value
             {
                 get
                 {
-                    if (m_version != m_tree._version)
-                    {
-                        throw new InvalidOperationException("Collection has been modified.");
-                    }
+                    CheckVersion();
                     return m_node.Item;
                 }
             }
 
+            /// <summary>
+            /// Gets next in-order node (node with bigger key).
+            /// </summary>
             public Node Next
             {
                 get
                 {
-                    if (m_version != m_tree._version)
-                    {
-                        throw new InvalidOperationException("Collection has been modified.");
-                    }
+                    CheckVersion();
                     return new Node(m_tree, m_tree.GetNext(m_node));
                 }
             }
 
+            /// <summary>
+            /// Gets previous in-order node (node with smaller key).
+            /// </summary>
             public Node Previous
             {
                 get
                 {
-                    if (m_version != m_tree._version)
-                    {
-                        throw new InvalidOperationException("Collection has been modified.");
-                    }
+                    CheckVersion();
                     return new Node(m_tree, m_tree.GetPrevious(m_node));
                 }
             }
@@ -1551,6 +1546,14 @@ namespace Rock.Collections
                 m_tree = tree;
                 m_node = node;
                 m_version = tree._version;
+            }
+
+            void CheckVersion()
+            {
+                if (m_version != m_tree._version)
+                {
+                    throw new InvalidOperationException("Collection has been modified.");
+                }
             }
         }
 
