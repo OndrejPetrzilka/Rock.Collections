@@ -1076,8 +1076,16 @@ namespace Rock.Collections
             }
         }
 
+        internal struct EmptyHelper
+        {
+            // We want to initialize static field as late as possible, that's why it's separate type
+            public static OrderedDictionary<TKey, TValue> m_empty = new OrderedDictionary<TKey, TValue>();
+        }
+
         public struct Reader : IEnumerable<KeyValuePair<TKey, TValue>>, IReadOnlyDictionary<TKey, TValue>
         {
+            public static Reader Empty { get { return new Reader(EmptyHelper.m_empty); } }
+
             private OrderedDictionary<TKey, TValue> dictionary;
 
             public TValue this[TKey key]
@@ -1133,6 +1141,8 @@ namespace Rock.Collections
 
         public struct ReverseReader : IEnumerable<KeyValuePair<TKey, TValue>>, IReadOnlyDictionary<TKey, TValue>
         {
+            public static ReverseReader Empty { get { return new ReverseReader(EmptyHelper.m_empty); } }
+
             private OrderedDictionary<TKey, TValue> dictionary;
 
             public TValue this[TKey key]
