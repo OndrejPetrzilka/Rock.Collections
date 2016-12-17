@@ -548,6 +548,71 @@ namespace Rock.Collections
             entries = newEntries;
         }
 
+        public bool Remove(TKey key, out TValue value)
+        {
+            if (key == null)
+            {
+                throw new ArgumentNullException(nameof(key));
+            }
+
+            if (buckets != null)
+            {
+                int hashCode = comparer.GetHashCode(key) & 0x7FFFFFFF;
+                int bucket = hashCode % buckets.Length;
+                int last = -1;
+                for (int i = buckets[bucket]; i >= 0; last = i, i = entries[i].next)
+                {
+                    if (entries[i].hashCode == hashCode && comparer.Equals(entries[i].key, key))
+                    {
+                        if (last < 0)
+                        {
+                            buckets[bucket] = entries[i].next;
+                        }
+                        else
+                        {
+                            entries[last].next = entries[i].next;
+                        }
+                        value = entries[i].value;
+                        entries[i].hashCode = -1;
+                        entries[i].next = freeList;
+                        entries[i].key = default(TKey);
+                        entries[i].value = default(TValue);
+
+                        // Connect linked list
+                        if (m_firstOrderIndex == i) // Is first
+                        {
+                            m_firstOrderIndex = entries[i].nextOrder;
+                        }
+                        if (m_lastOrderIndex == i) // Is last
+                        {
+                            m_lastOrderIndex = entries[i].previousOrder;
+                        }
+
+                        var next = entries[i].nextOrder;
+                        var prev = entries[i].previousOrder;
+                        if (next != -1)
+                        {
+                            entries[next].previousOrder = prev;
+                        }
+                        if (prev != -1)
+                        {
+                            entries[prev].nextOrder = next;
+                        }
+
+                        entries[i].previousOrder = -1;
+                        entries[i].nextOrder = -1;
+
+                        freeList = i;
+                        freeCount++;
+                        version++;
+                        return true;
+                    }
+                }
+            }
+            value = default(TValue);
+            return false;
+        }
+
         public bool Remove(TKey key)
         {
             if (key == null)
