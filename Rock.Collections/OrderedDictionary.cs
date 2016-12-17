@@ -71,6 +71,7 @@ namespace Rock.Collections
         {
             if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "ArgumentOutOfRange_NeedNonNegNum");
             if (capacity > 0) Initialize(capacity);
+            else m_firstOrderIndex = m_lastOrderIndex = -1;
             this.comparer = comparer ?? EqualityComparer<TKey>.Default;
         }
 
