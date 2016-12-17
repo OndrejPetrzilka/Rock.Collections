@@ -92,21 +92,18 @@ namespace Rock.Collections
             if (dictionary.GetType() == typeof(OrderedDictionary<TKey, TValue>))
             {
                 OrderedDictionary<TKey, TValue> d = (OrderedDictionary<TKey, TValue>)dictionary;
-                int count = d.count;
-                Entry[] entries = d.entries;
-                for (int i = 0; i < count; i++)
+                foreach (var item in d)
                 {
-                    if (entries[i].hashCode >= 0)
-                    {
-                        Add(entries[i].key, entries[i].value);
-                    }
+                    // Correct way to add items in same order
+                    Add(item.Key, item.Value);
                 }
-                return;
             }
-
-            foreach (KeyValuePair<TKey, TValue> pair in dictionary)
+            else
             {
-                Add(pair.Key, pair.Value);
+                foreach (KeyValuePair<TKey, TValue> pair in dictionary)
+                {
+                    Add(pair.Key, pair.Value);
+                }
             }
         }
 
