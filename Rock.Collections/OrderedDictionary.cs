@@ -304,6 +304,31 @@ namespace Rock.Collections
             return new Enumerator(this, Enumerator.KeyValuePair);
         }
 
+        /// <summary>
+        /// Gets enumerator which starts enumerating at specified element, O(1).
+        /// When element is not found, empty enumerator is returned.
+        /// </summary>
+        public Enumerator GetEnumerator(TKey startingElement)
+        {
+            int index = FindEntry(startingElement);
+            return new Enumerator(this, Enumerator.KeyValuePair, index);
+        }
+
+        public ReverseEnumerator GetReverseEnumerator()
+        {
+            return new ReverseEnumerator(this, Enumerator.KeyValuePair);
+        }
+
+        /// <summary>
+        /// Gets reverse enumerator which starts enumerating at specified element, O(1).
+        /// When element is not found, empty enumerator is returned.
+        /// </summary>
+        public ReverseEnumerator GetReverseEnumerator(TKey startingElement)
+        {
+            int index = FindEntry(startingElement);
+            return new ReverseEnumerator(this, Enumerator.KeyValuePair, index);
+        }
+
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
         {
             return new Enumerator(this, Enumerator.KeyValuePair);
@@ -1102,8 +1127,7 @@ namespace Rock.Collections
         }
 
         [Serializable]
-        public struct Enumerator : IEnumerator<KeyValuePair<TKey, TValue>>,
-            IDictionaryEnumerator
+        public struct Enumerator : IEnumerator<KeyValuePair<TKey, TValue>>, IDictionaryEnumerator
         {
             private OrderedDictionary<TKey, TValue> dictionary;
             private int version;
@@ -1120,7 +1144,16 @@ namespace Rock.Collections
                 version = dictionary.version;
                 index = dictionary.m_firstOrderIndex;
                 this.getEnumeratorRetType = getEnumeratorRetType;
-                current = new KeyValuePair<TKey, TValue>();
+                current = default(KeyValuePair<TKey, TValue>);
+            }
+
+            internal Enumerator(OrderedDictionary<TKey, TValue> dictionary, int getEnumeratorRetType, int startingIndex)
+            {
+                this.dictionary = dictionary;
+                version = dictionary.version;
+                index = startingIndex;
+                this.getEnumeratorRetType = getEnumeratorRetType;
+                current = default(KeyValuePair<TKey, TValue>);
             }
 
             public bool MoveNext()
@@ -1138,7 +1171,7 @@ namespace Rock.Collections
                 }
 
                 index = -1;
-                current = new KeyValuePair<TKey, TValue>();
+                current = default(KeyValuePair<TKey, TValue>);
                 return false;
             }
 
@@ -1166,7 +1199,7 @@ namespace Rock.Collections
                     }
                     else
                     {
-                        return new KeyValuePair<TKey, TValue>(current.Key, current.Value);
+                        return current;
                     }
                 }
             }
@@ -1179,7 +1212,7 @@ namespace Rock.Collections
                 }
 
                 index = dictionary.m_firstOrderIndex;
-                current = new KeyValuePair<TKey, TValue>();
+                current = default(KeyValuePair<TKey, TValue>);
             }
 
             DictionaryEntry IDictionaryEnumerator.Entry
@@ -1223,8 +1256,7 @@ namespace Rock.Collections
         }
 
         [Serializable]
-        public struct ReverseEnumerator : IEnumerator<KeyValuePair<TKey, TValue>>,
-            IDictionaryEnumerator
+        public struct ReverseEnumerator : IEnumerator<KeyValuePair<TKey, TValue>>, IDictionaryEnumerator
         {
             private OrderedDictionary<TKey, TValue> dictionary;
             private int version;
@@ -1241,7 +1273,16 @@ namespace Rock.Collections
                 version = dictionary.version;
                 index = dictionary.m_lastOrderIndex;
                 this.getEnumeratorRetType = getEnumeratorRetType;
-                current = new KeyValuePair<TKey, TValue>();
+                current = default(KeyValuePair<TKey, TValue>);
+            }
+
+            internal ReverseEnumerator(OrderedDictionary<TKey, TValue> dictionary, int getEnumeratorRetType, int startingIndex)
+            {
+                this.dictionary = dictionary;
+                version = dictionary.version;
+                index = startingIndex;
+                this.getEnumeratorRetType = getEnumeratorRetType;
+                current = default(KeyValuePair<TKey, TValue>);
             }
 
             public bool MoveNext()
@@ -1259,7 +1300,7 @@ namespace Rock.Collections
                 }
 
                 index = -1;
-                current = new KeyValuePair<TKey, TValue>();
+                current = default(KeyValuePair<TKey, TValue>);
                 return false;
             }
 
@@ -1287,7 +1328,7 @@ namespace Rock.Collections
                     }
                     else
                     {
-                        return new KeyValuePair<TKey, TValue>(current.Key, current.Value);
+                        return current;
                     }
                 }
             }
@@ -1300,7 +1341,7 @@ namespace Rock.Collections
                 }
 
                 index = dictionary.m_lastOrderIndex;
-                current = new KeyValuePair<TKey, TValue>();
+                current = default(KeyValuePair<TKey, TValue>);
             }
 
             DictionaryEntry IDictionaryEnumerator.Entry
