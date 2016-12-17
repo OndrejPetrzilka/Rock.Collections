@@ -85,10 +85,8 @@ namespace Rock.Collections
                 throw new ArgumentNullException(nameof(dictionary));
             }
 
-            // It is likely that the passed-in dictionary is Dictionary<TKey,TValue>. When this is the case,
-            // avoid the enumerator allocation and overhead by looping through the entries array directly.
-            // We only do this when dictionary is Dictionary<TKey,TValue> and not a subclass, to maintain
-            // back-compat with subclasses that may have overridden the enumerator behavior.
+            // It is likely that the passed-in dictionary is OrderedDictionary<TKey,TValue>. When this is the case,
+            // avoid the enumerator allocation.
             if (dictionary.GetType() == typeof(OrderedDictionary<TKey, TValue>))
             {
                 OrderedDictionary<TKey, TValue> d = (OrderedDictionary<TKey, TValue>)dictionary;
