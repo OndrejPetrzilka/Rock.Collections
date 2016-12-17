@@ -13,6 +13,7 @@ Purpose of this repository is to provide some of high-performance collections, w
 
 ## `OrderedDictionary<TKey,TValue>`
 * Same as `OrderedHashSet<T>` in almost every aspect
+* `bool Remove(TKey, out TValue)`, method which returns removed value
 
 ## `SortedSet<T>`
 * Items are enumerated without allocations
@@ -30,7 +31,8 @@ Purpose of this repository is to provide some of high-performance collections, w
 * Or download whole project and that to your project
 
 ## Future
-* Range enumerators/readers for OrderedDictionary, SortedSet
+* ~~Range enumerators/readers for OrderedDictionary~~ done
+* Range enumerators/readers for SortedSet
 * SortedDictionary, like standard [System.Collections.Generic.SortedDictionary](https://msdn.microsoft.com/en-us/library/dd412070), but enumeration without allocations
 
 ## Contributions
