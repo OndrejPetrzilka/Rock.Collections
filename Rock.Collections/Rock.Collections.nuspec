@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>Rock.Collections</id>
+    <version>1.0.0</version>
+    <title>Rock.Collections</title>
+    <authors>Ondrej Petrzilka</authors>
+    <owners>Ondrej Petrzilka</owners>
+    <licenseUrl>https://opensource.org/licenses/MIT</licenseUrl>
+    <projectUrl>https://github.com/OndrejPetrzilka/Rock.Collections/</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Purpose of this repository is to provide some of high-performance collections, which are missing in System.Collections.Generic. The collections are written in way to minimize unnecessary memory allocations; they are originally used in game engine.</description>
+    <copyright>Copyright 2018</copyright>
+    <tags>Collections</tags>
+  </metadata>
+</package>
