@@ -22,13 +22,13 @@ namespace Rock.Collections
     {
         private struct Entry
         {
-            public int hashCode;    // Lower 31 bits of hash code, -1 if unused
-            public int next;        // Index of next entry, -1 if last
+            public int hashCode;    // Lower 31 bits of hash code, UnusedHash if unused
+            public int next;        // Index of next entry, LastIndex if last
             public TKey key;           // Key of entry
             public TValue value;         // Value of entry
 
-            public int nextOrder;     // Index of next entry by order, -1 if last
-            public int previousOrder; // Index of previous entry by order, -1 if first
+            public int nextOrder;     // Index of next entry by order, LastIndex if last
+            public int previousOrder; // Index of previous entry by order, LastIndex if first
         }
 
         private int[] buckets;
@@ -50,6 +50,9 @@ namespace Rock.Collections
         private const string HashSizeName = "HashSize"; // Must save buckets.Length
         private const string KeyValuePairsName = "KeyValuePairs";
         private const string ComparerName = "Comparer";
+        private const int UnusedHash = -1;
+        private const int LastIndex = -1;
+        private const int InvalidIndex = -2;
 
         public Reader Items
         {
@@ -71,7 +74,7 @@ namespace Rock.Collections
         {
             if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "ArgumentOutOfRange_NeedNonNegNum");
             if (capacity > 0) Initialize(capacity);
-            else m_firstOrderIndex = m_lastOrderIndex = -1;
+            else m_firstOrderIndex = m_lastOrderIndex = LastIndex;
             this.comparer = comparer ?? EqualityComparer<TKey>.Default;
         }
 
@@ -231,13 +234,13 @@ namespace Rock.Collections
         {
             if (count > 0)
             {
-                for (int i = 0; i < buckets.Length; i++) buckets[i] = -1;
+                for (int i = 0; i < buckets.Length; i++) buckets[i] = LastIndex;
                 Array.Clear(entries, 0, count);
-                freeList = -1;
+                freeList = LastIndex;
                 count = 0;
                 freeCount = 0;
-                m_firstOrderIndex = -1;
-                m_lastOrderIndex = -1;
+                m_firstOrderIndex = LastIndex;
+                m_lastOrderIndex = LastIndex;
                 version++;
             }
         }
@@ -286,7 +289,7 @@ namespace Rock.Collections
 
             int numCopied = 0;
             Entry[] entries = this.entries;
-            for (int i = m_firstOrderIndex; i != -1; i = entries[i].nextOrder)
+            for (int i = m_firstOrderIndex; i != LastIndex; i = entries[i].nextOrder)
             {
                 array[index + numCopied] = new KeyValuePair<TKey, TValue>(entries[i].key, entries[i].value);
                 numCopied++;
@@ -363,18 +366,18 @@ namespace Rock.Collections
                     if (entries[i].hashCode == hashCode && comparer.Equals(entries[i].key, key)) return i;
                 }
             }
-            return -1;
+            return LastIndex;
         }
 
         private void Initialize(int capacity)
         {
             int size = HashHelpers.GetPrime(capacity);
             buckets = new int[size];
-            for (int i = 0; i < buckets.Length; i++) buckets[i] = -1;
+            for (int i = 0; i < buckets.Length; i++) buckets[i] = LastIndex;
             entries = new Entry[size];
-            freeList = -1;
-            m_firstOrderIndex = -1;
-            m_lastOrderIndex = -1;
+            freeList = LastIndex;
+            m_firstOrderIndex = LastIndex;
+            m_lastOrderIndex = LastIndex;
         }
 
         private void Insert(TKey key, TValue value, bool add)
@@ -434,15 +437,15 @@ namespace Rock.Collections
             entries[index].value = value;
 
             // Append to linked list
-            if (m_lastOrderIndex != -1)
+            if (m_lastOrderIndex != LastIndex)
             {
                 entries[m_lastOrderIndex].nextOrder = index;
             }
-            if (m_firstOrderIndex == -1)
+            if (m_firstOrderIndex == LastIndex)
             {
                 m_firstOrderIndex = index;
             }
-            entries[index].nextOrder = -1;
+            entries[index].nextOrder = LastIndex;
             entries[index].previousOrder = m_lastOrderIndex;
             m_lastOrderIndex = index;
 
@@ -463,7 +466,7 @@ namespace Rock.Collections
             HashHelpers.SerializationInfoTable.TryGetValue(this, out siInfo);
             if (siInfo == null)
             {
-                // We can return immediately if this function is called twice. 
+                // We can return immediately if this function is called twice.
                 // Note we remove the serialization info from the table at the end of this method.
                 return;
             }
@@ -475,11 +478,11 @@ namespace Rock.Collections
             if (hashsize != 0)
             {
                 buckets = new int[hashsize];
-                for (int i = 0; i < buckets.Length; i++) buckets[i] = -1;
+                for (int i = 0; i < buckets.Length; i++) buckets[i] = LastIndex;
                 entries = new Entry[hashsize];
-                freeList = -1;
-                m_firstOrderIndex = -1;
-                m_lastOrderIndex = -1;
+                freeList = LastIndex;
+                m_firstOrderIndex = LastIndex;
+                m_lastOrderIndex = LastIndex;
 
                 KeyValuePair<TKey, TValue>[] array =
                     (KeyValuePair<TKey, TValue>[])siInfo.GetValue(KeyValuePairsName, typeof(KeyValuePair<TKey, TValue>[]));
@@ -516,7 +519,7 @@ namespace Rock.Collections
         {
             Debug.Assert(newSize >= entries.Length);
             int[] newBuckets = new int[newSize];
-            for (int i = 0; i < newBuckets.Length; i++) newBuckets[i] = -1;
+            for (int i = 0; i < newBuckets.Length; i++) newBuckets[i] = LastIndex;
 
             Entry[] newEntries = new Entry[newSize];
             Array.Copy(entries, 0, newEntries, 0, count);
@@ -525,7 +528,7 @@ namespace Rock.Collections
             {
                 for (int i = 0; i < count; i++)
                 {
-                    if (newEntries[i].hashCode != -1)
+                    if (newEntries[i].hashCode != UnusedHash)
                     {
                         newEntries[i].hashCode = (comparer.GetHashCode(newEntries[i].key) & 0x7FFFFFFF);
                     }
@@ -557,7 +560,7 @@ namespace Rock.Collections
             {
                 int hashCode = comparer.GetHashCode(key) & 0x7FFFFFFF;
                 int bucket = hashCode % buckets.Length;
-                int last = -1;
+                int last = LastIndex;
                 for (int i = buckets[bucket]; i >= 0; last = i, i = entries[i].next)
                 {
                     if (entries[i].hashCode == hashCode && comparer.Equals(entries[i].key, key))
@@ -571,7 +574,7 @@ namespace Rock.Collections
                             entries[last].next = entries[i].next;
                         }
                         value = entries[i].value;
-                        entries[i].hashCode = -1;
+                        entries[i].hashCode = UnusedHash;
                         entries[i].next = freeList;
                         entries[i].key = default(TKey);
                         entries[i].value = default(TValue);
@@ -588,17 +591,17 @@ namespace Rock.Collections
 
                         var next = entries[i].nextOrder;
                         var prev = entries[i].previousOrder;
-                        if (next != -1)
+                        if (next != LastIndex)
                         {
                             entries[next].previousOrder = prev;
                         }
-                        if (prev != -1)
+                        if (prev != LastIndex)
                         {
                             entries[prev].nextOrder = next;
                         }
 
-                        entries[i].previousOrder = -1;
-                        entries[i].nextOrder = -1;
+                        entries[i].previousOrder = LastIndex;
+                        entries[i].nextOrder = LastIndex;
 
                         freeList = i;
                         freeCount++;
@@ -622,7 +625,7 @@ namespace Rock.Collections
             {
                 int hashCode = comparer.GetHashCode(key) & 0x7FFFFFFF;
                 int bucket = hashCode % buckets.Length;
-                int last = -1;
+                int last = LastIndex;
                 for (int i = buckets[bucket]; i >= 0; last = i, i = entries[i].next)
                 {
                     if (entries[i].hashCode == hashCode && comparer.Equals(entries[i].key, key))
@@ -635,7 +638,7 @@ namespace Rock.Collections
                         {
                             entries[last].next = entries[i].next;
                         }
-                        entries[i].hashCode = -1;
+                        entries[i].hashCode = UnusedHash;
                         entries[i].next = freeList;
                         entries[i].key = default(TKey);
                         entries[i].value = default(TValue);
@@ -652,17 +655,17 @@ namespace Rock.Collections
 
                         var next = entries[i].nextOrder;
                         var prev = entries[i].previousOrder;
-                        if (next != -1)
+                        if (next != LastIndex)
                         {
                             entries[next].previousOrder = prev;
                         }
-                        if (prev != -1)
+                        if (prev != LastIndex)
                         {
                             entries[prev].nextOrder = next;
                         }
 
-                        entries[i].previousOrder = -1;
-                        entries[i].nextOrder = -1;
+                        entries[i].previousOrder = LastIndex;
+                        entries[i].nextOrder = LastIndex;
 
                         freeList = i;
                         freeCount++;
@@ -689,14 +692,14 @@ namespace Rock.Collections
         public bool MoveFirst(TKey key)
         {
             int index = FindEntry(key);
-            if (index != -1)
+            if (index != LastIndex)
             {
                 var prev = entries[index].previousOrder;
-                if (prev != -1) // Not first
+                if (prev != LastIndex) // Not first
                 {
                     // Disconnect
                     var next = entries[index].nextOrder;
-                    if (next == -1) // Last
+                    if (next == LastIndex) // Last
                     {
                         m_lastOrderIndex = prev;
                     }
@@ -707,7 +710,7 @@ namespace Rock.Collections
                     entries[prev].nextOrder = next;
 
                     // Reconnect
-                    entries[index].previousOrder = -1;
+                    entries[index].previousOrder = LastIndex;
                     entries[index].nextOrder = m_firstOrderIndex;
                     entries[m_firstOrderIndex].previousOrder = index;
                     m_firstOrderIndex = index;
@@ -720,14 +723,14 @@ namespace Rock.Collections
         public bool MoveLast(TKey key)
         {
             int index = FindEntry(key);
-            if (index != -1)
+            if (index != LastIndex)
             {
                 var next = entries[index].nextOrder;
-                if (next != -1) // Not last
+                if (next != LastIndex) // Not last
                 {
                     // Disconnect
                     var prev = entries[index].previousOrder;
-                    if (prev == -1) // First
+                    if (prev == LastIndex) // First
                     {
                         m_firstOrderIndex = next;
                     }
@@ -738,7 +741,7 @@ namespace Rock.Collections
                     entries[next].previousOrder = prev;
 
                     // Reconnect
-                    entries[index].nextOrder = -1;
+                    entries[index].nextOrder = LastIndex;
                     entries[index].previousOrder = m_lastOrderIndex;
                     entries[m_lastOrderIndex].nextOrder = index;
                     m_lastOrderIndex = index;
@@ -752,12 +755,12 @@ namespace Rock.Collections
         {
             int index = FindEntry(keyToMove);
             int markIndex = FindEntry(mark);
-            if (index != -1 && markIndex != -1 && index != markIndex)
+            if (index != LastIndex && markIndex != LastIndex && index != markIndex)
             {
                 // Disconnect
                 var next = entries[index].nextOrder;
                 var prev = entries[index].previousOrder;
-                if (prev == -1) // First
+                if (prev == LastIndex) // First
                 {
                     m_firstOrderIndex = next;
                 }
@@ -765,7 +768,7 @@ namespace Rock.Collections
                 {
                     entries[prev].nextOrder = next;
                 }
-                if (next == -1) // Last
+                if (next == LastIndex) // Last
                 {
                     m_lastOrderIndex = prev;
                 }
@@ -779,7 +782,7 @@ namespace Rock.Collections
                 entries[index].nextOrder = markIndex;
                 entries[index].previousOrder = preMark;
                 entries[markIndex].previousOrder = index;
-                if (preMark == -1)
+                if (preMark == LastIndex)
                 {
                     m_firstOrderIndex = index;
                 }
@@ -796,12 +799,12 @@ namespace Rock.Collections
         {
             int index = FindEntry(keyToMove);
             int markIndex = FindEntry(mark);
-            if (index != -1 && markIndex != -1 && index != markIndex)
+            if (index != LastIndex && markIndex != LastIndex && index != markIndex)
             {
                 // Disconnect
                 var next = entries[index].nextOrder;
                 var prev = entries[index].previousOrder;
-                if (prev == -1) // First
+                if (prev == LastIndex) // First
                 {
                     m_firstOrderIndex = next;
                 }
@@ -809,7 +812,7 @@ namespace Rock.Collections
                 {
                     entries[prev].nextOrder = next;
                 }
-                if (next == -1) // Last
+                if (next == LastIndex) // Last
                 {
                     m_lastOrderIndex = prev;
                 }
@@ -823,7 +826,7 @@ namespace Rock.Collections
                 entries[index].previousOrder = markIndex;
                 entries[index].nextOrder = postMark;
                 entries[markIndex].nextOrder = index;
-                if (postMark == -1)
+                if (postMark == LastIndex)
                 {
                     m_lastOrderIndex = index;
                 }
@@ -898,7 +901,7 @@ namespace Rock.Collections
                 Entry[] entries = this.entries;
 
                 int numCopied = 0;
-                for (int i = m_firstOrderIndex; i != -1; i = entries[i].nextOrder)
+                for (int i = m_firstOrderIndex; i != LastIndex; i = entries[i].nextOrder)
                 {
                     dictEntryArray[index + numCopied] = new DictionaryEntry(entries[i].key, entries[i].value);
                     numCopied++;
@@ -917,7 +920,7 @@ namespace Rock.Collections
                 {
                     Entry[] entries = this.entries;
                     int numCopied = 0;
-                    for (int i = m_firstOrderIndex; i != -1; i = entries[i].nextOrder)
+                    for (int i = m_firstOrderIndex; i != LastIndex; i = entries[i].nextOrder)
                     {
                         objects[index + numCopied] = new DictionaryEntry(entries[i].key, entries[i].value);
                         numCopied++;
@@ -1233,14 +1236,14 @@ namespace Rock.Collections
                     throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                 }
 
-                while (index != -1)
+                while (index != LastIndex)
                 {
                     current = new KeyValuePair<TKey, TValue>(dictionary.entries[index].key, dictionary.entries[index].value);
                     index = dictionary.entries[index].nextOrder;
                     return true;
                 }
 
-                index = -1;
+                index = InvalidIndex;
                 current = default(KeyValuePair<TKey, TValue>);
                 return false;
             }
@@ -1258,7 +1261,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_firstOrderIndex || index == -1)
+                    if (index == dictionary.m_firstOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1289,7 +1292,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_firstOrderIndex || index == -1)
+                    if (index == dictionary.m_firstOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1302,7 +1305,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_firstOrderIndex || index == -1)
+                    if (index == dictionary.m_firstOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1315,7 +1318,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_firstOrderIndex || index == -1)
+                    if (index == dictionary.m_firstOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1362,14 +1365,14 @@ namespace Rock.Collections
                     throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                 }
 
-                while (index != -1)
+                while (index != LastIndex)
                 {
                     current = new KeyValuePair<TKey, TValue>(dictionary.entries[index].key, dictionary.entries[index].value);
                     index = dictionary.entries[index].previousOrder;
                     return true;
                 }
 
-                index = -1;
+                index = InvalidIndex;
                 current = default(KeyValuePair<TKey, TValue>);
                 return false;
             }
@@ -1387,7 +1390,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_lastOrderIndex || index == -1)
+                    if (index == dictionary.m_lastOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1418,7 +1421,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_lastOrderIndex || index == -1)
+                    if (index == dictionary.m_lastOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1431,7 +1434,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_lastOrderIndex || index == -1)
+                    if (index == dictionary.m_lastOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1444,7 +1447,7 @@ namespace Rock.Collections
             {
                 get
                 {
-                    if (index == dictionary.m_lastOrderIndex || index == -1)
+                    if (index == dictionary.m_lastOrderIndex || index == InvalidIndex)
                     {
                         throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                     }
@@ -1494,7 +1497,7 @@ namespace Rock.Collections
 
                 int numCopied = 0;
                 Entry[] entries = dictionary.entries;
-                for (int i = dictionary.m_firstOrderIndex; i != -1; i = entries[i].nextOrder)
+                for (int i = dictionary.m_firstOrderIndex; i != LastIndex; i = entries[i].nextOrder)
                 {
                     array[index + numCopied] = entries[i].key;
                     numCopied++;
@@ -1587,7 +1590,7 @@ namespace Rock.Collections
 
                     try
                     {
-                        for (int i = dictionary.m_firstOrderIndex; i != -1; i = entries[i].nextOrder)
+                        for (int i = dictionary.m_firstOrderIndex; i != LastIndex; i = entries[i].nextOrder)
                         {
                             objects[index + numCopied] = entries[i].key;
                             numCopied++;
@@ -1638,14 +1641,14 @@ namespace Rock.Collections
                         throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                     }
 
-                    while (index != -1)
+                    while (index != LastIndex)
                     {
                         currentKey = dictionary.entries[index].key;
                         index = dictionary.entries[index].nextOrder;
                         return true;
                     }
 
-                    index = -1;
+                    index = InvalidIndex;
                     currentKey = default(TKey);
                     return false;
                 }
@@ -1662,7 +1665,7 @@ namespace Rock.Collections
                 {
                     get
                     {
-                        if (index == dictionary.m_firstOrderIndex || index == -1)
+                        if (index == dictionary.m_firstOrderIndex || index == InvalidIndex)
                         {
                             throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                         }
@@ -1724,7 +1727,7 @@ namespace Rock.Collections
 
                 int numCopied = 0;
                 Entry[] entries = dictionary.entries;
-                for (int i = dictionary.m_firstOrderIndex; i != -1; i = entries[i].nextOrder)
+                for (int i = dictionary.m_firstOrderIndex; i != LastIndex; i = entries[i].nextOrder)
                 {
                     array[index + numCopied] = entries[i].value;
                     numCopied++;
@@ -1815,7 +1818,7 @@ namespace Rock.Collections
 
                     try
                     {
-                        for (int i = dictionary.m_firstOrderIndex; i != -1; i = entries[i].nextOrder)
+                        for (int i = dictionary.m_firstOrderIndex; i != LastIndex; i = entries[i].nextOrder)
                         {
                             objects[index + numCopied] = entries[i].value;
                             numCopied++;
@@ -1866,14 +1869,14 @@ namespace Rock.Collections
                         throw new InvalidOperationException("InvalidOperation_EnumFailedVersion");
                     }
 
-                    while (index != -1)
+                    while (index != LastIndex)
                     {
                         currentValue = dictionary.entries[index].value;
                         index = dictionary.entries[index].nextOrder;
                         return true;
                     }
 
-                    index = -1;
+                    index = InvalidIndex;
                     currentValue = default(TValue);
                     return false;
                 }
@@ -1890,7 +1893,7 @@ namespace Rock.Collections
                 {
                     get
                     {
-                        if (index == dictionary.m_firstOrderIndex || index == -1)
+                        if (index == dictionary.m_firstOrderIndex || index == InvalidIndex)
                         {
                             throw new InvalidOperationException("InvalidOperation_EnumOpCantHappen");
                         }
